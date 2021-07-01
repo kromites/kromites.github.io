@@ -24,7 +24,7 @@
 
 
 <h4 id="3-插入排序"><a href="#3-插入排序" class="headerlink" title="3.     插入排序"></a>3.     插入排序</h4><p>这个没什么讲的，反正记得<strong>插入排序是基于<code>swap</code>的</strong>就行</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">void insertsort(vector&lt;int&gt; &amp;nums, int n) &#123;</span><br><span class="line">	for(int i=0; i&lt;n; ++i) &#123;</span><br><span class="line">		for(int j=i; j&gt;0&amp;&amp; nums[j] &lt; nums[j-1]; --j) &#123;</span><br><span class="line">			swap(nums[j], nums[j - 1]);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight mipsasm"><table><tr><td class="code"><pre><span class="line">void <span class="keyword">insertsort(vector&lt;int&gt; </span>&amp;nums, int n) &#123;</span><br><span class="line">	for(int i=<span class="number">0</span><span class="comment">; i&lt;n; ++i) &#123;</span></span><br><span class="line">		for(int <span class="keyword">j=i; </span><span class="keyword">j&gt;0&amp;&amp; </span>nums[<span class="keyword">j] </span>&lt; nums[<span class="keyword">j-1]; </span>--<span class="keyword">j) </span>&#123;</span><br><span class="line">			<span class="keyword">swap(nums[j], </span>nums[<span class="keyword">j </span>- <span class="number">1</span>]);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 
 
@@ -35,7 +35,7 @@
 
 
 
-<h4 id="5-选择排序"><a href="#5-选择排序" class="headerlink" title="5.     选择排序"></a>5.     选择排序</h4><figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">void selection_sort(vector&lt;int&gt;&amp; nums, int n) &#123;</span><br><span class="line">	int mid;</span><br><span class="line">	for (int i = 0; i &lt; n - 1; ++i) &#123;</span><br><span class="line">		mid = i;</span><br><span class="line">		for (int j = i + 1; j &lt; n; ++j) &#123;</span><br><span class="line">			if (nums[j] &lt; nums[mid]) &#123;</span><br><span class="line">				mid = j;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		swap(nums[mid], nums[i]);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="5-选择排序"><a href="#5-选择排序" class="headerlink" title="5.     选择排序"></a>5.     选择排序</h4><figure class="highlight excel"><table><tr><td class="code"><pre><span class="line">void selection_sort(vector&lt;<span class="built_in">int</span>&gt;&amp; nums, <span class="built_in">int</span> <span class="built_in">n</span>) &#123;</span><br><span class="line">	<span class="built_in">int</span> <span class="built_in">mid</span>;</span><br><span class="line">	for (<span class="built_in">int</span> i = <span class="number">0</span>; i &lt; <span class="built_in">n</span> - <span class="number">1</span>; ++i) &#123;</span><br><span class="line">		<span class="built_in">mid</span> = i;</span><br><span class="line">		for (<span class="built_in">int</span> j = i + <span class="number">1</span>; j &lt; <span class="built_in">n</span>; ++j) &#123;</span><br><span class="line">			<span class="built_in">if</span> (nums[j] &lt; nums[<span class="built_in">mid</span>]) &#123;</span><br><span class="line">				<span class="built_in">mid</span> = j;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		swap(nums[<span class="built_in">mid</span>], nums[i]);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 
 
@@ -62,7 +62,7 @@
         <category>算法</category>
       </categories>
       <tags>
-        <tag>排序</tag>
+        <tag>-排序</tag>
       </tags>
   </entry>
   <entry>
