@@ -3,7 +3,9 @@
   <entry>
     <title>排序算法</title>
     <url>/posts/735e5788/</url>
-    <content><![CDATA[<h1 id="排序算法"><a href="#排序算法" class="headerlink" title="排序算法"></a>排序算法</h1><p>前言： 各类排序算法是一个很基础的算法概念，在面试当中，手撕排序算法也只算得上一道简单题。</p>
+    <content><![CDATA[<h1 id="排序算法"><a href="#排序算法" class="headerlink" title="排序算法"></a>排序算法</h1><p> 各类排序算法是一个很基础的算法概念，在面试当中，手撕排序算法也只算得上一道简单题。</p>
+<span id="more"></span>
+
 <p>排序算法一般可分为 快速排序， 归并排序，插入排序，冒泡排序，选择排序和堆排序。（其中快排，归并和堆排序比较难，但是要掌握）</p>
 <h3 id="C-中的std-sort"><a href="#C-中的std-sort" class="headerlink" title="C++中的std::sort"></a>C++中的<code>std::sort</code></h3><p>​    sort算法主体是一个快速排序，快速排序的时间复杂度为<code>O(NlogN)</code>，但是其对效率有了优化。</p>
 <p>首先，快速排序在小区间的效率不如插入排序，因此在小空间的话，就用<strong>插入排序</strong>。 而且快速排序是基于递归的，因此如果数据过大，递归层数过大，这就要转入<strong>堆排序</strong> 。</p>
