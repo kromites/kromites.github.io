@@ -81,15 +81,15 @@
 
 
 
-<meta name="description" content="简单动态字符串Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。 &lt;!-- more --&gt; 1 SDS的定义1234567891011#include &lt;sds.h&gt;struct sdshdr&amp;#123;    &#x2F;&#x2F; 记录buf数组中已使用字节的数量    &#x2F;&#x2F; 等于SDS所保存的字符串长度    int len;    &#x2F;">
+<meta name="description" content="简单动态字符串Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="RedisSDS">
 <meta property="og:url" content="http://kromites.github.io/2021/07/01/RedisSDS/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="简单动态字符串Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。 &lt;!-- more --&gt; 1 SDS的定义1234567891011#include &lt;sds.h&gt;struct sdshdr&amp;#123;    &#x2F;&#x2F; 记录buf数组中已使用字节的数量    &#x2F;&#x2F; 等于SDS所保存的字符串长度    int len;    &#x2F;">
+<meta property="og:description" content="简单动态字符串Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。">
 <meta property="og:locale">
 <meta property="article:published_time" content="2021-07-01T11:15:44.000Z">
-<meta property="article:modified_time" content="2021-07-01T11:24:31.077Z">
+<meta property="article:modified_time" content="2021-07-01T11:30:24.358Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="Hexo">
 <meta property="article:tag" content="Markdown">
@@ -411,7 +411,8 @@
 
       
         <h3 id="简单动态字符串"><a href="#简单动态字符串" class="headerlink" title="简单动态字符串"></a>简单动态字符串</h3><p>Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。</p>
-<p><strong><code>&lt;!-- more --&gt;</code></strong></p>
+<span id="more"></span>
+
 <h4 id="1-SDS的定义"><a href="#1-SDS的定义" class="headerlink" title="1 SDS的定义"></a>1 SDS的定义</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sds.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span>&#123;</span></span><br><span class="line">    <span class="comment">// 记录buf数组中已使用字节的数量</span></span><br><span class="line">    <span class="comment">// 等于SDS所保存的字符串长度</span></span><br><span class="line">    <span class="keyword">int</span> len;</span><br><span class="line">    <span class="comment">// 记录buf数组中未使用字节的数量</span></span><br><span class="line">    <span class="keyword">int</span> <span class="built_in">free</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 字节数组，用于保存字符串</span></span><br><span class="line">    <span class="keyword">char</span> buf[];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p><em>tag： 由于SDS遵循C字符串以空字符结尾的惯例， 保存空字符的1字节空间不计算在SDS的Len属性里面，并且为空字符自动生成一个字节空间</em></p>
