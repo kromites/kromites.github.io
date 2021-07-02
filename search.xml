@@ -1,6 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
+    <title>博客介绍</title>
+    <url>/posts/e627a59/</url>
+    <content><![CDATA[<blockquote>
+<p>欢迎您访问此博客！ 点开阅读全文可了解到博客的基本信息</p>
+</blockquote>
+<span id="more"></span>
+
+<p>本博客创建于2021.7.1。作为一名22届毕业的学生，目前的主要精力放在找工作上，因此最近上传的大部分是自己的学习笔记。笔记内容涉及到以下几个主要方面：</p>
+<ul>
+<li>数据结构与算法</li>
+<li>计算机网络</li>
+<li>操作系统</li>
+<li>网络编程</li>
+<li>数据库</li>
+<li>项目心得</li>
+</ul>
+<p>希望自己能够在这个夏天拿到心满意足的Offer！</p>
+<p>TO BE CONTINUE~</p>
+]]></content>
+      <categories>
+        <category>非技术</category>
+      </categories>
+      <tags>
+        <tag>博客</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>排序算法</title>
     <url>/posts/735e5788/</url>
     <content><![CDATA[<h1 id="排序算法"><a href="#排序算法" class="headerlink" title="排序算法"></a>排序算法</h1><p> 各类排序算法是一个很基础的算法概念，在面试当中，手撕排序算法也只算得上一道简单题。</p>
@@ -67,7 +94,7 @@
   </entry>
   <entry>
     <title>RedisSDS</title>
-    <url>/posts/undefined/</url>
+    <url>/posts/ddef0534/</url>
     <content><![CDATA[<h3 id="简单动态字符串"><a href="#简单动态字符串" class="headerlink" title="简单动态字符串"></a>简单动态字符串</h3><p>Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。</p>
 <span id="more"></span>
 
@@ -166,8 +193,7 @@
         <category>Redis</category>
       </categories>
       <tags>
-        <tag>Hexo</tag>
-        <tag>Markdown</tag>
+        <tag>Redis</tag>
       </tags>
   </entry>
   <entry>
