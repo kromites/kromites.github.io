@@ -37,7 +37,7 @@
 
 
 
-<h3 id="1-关键字"><a href="#1-关键字" class="headerlink" title="1. 关键字"></a>1. 关键字</h3><h4 id="static-关键字"><a href="#static-关键字" class="headerlink" title="static 关键字"></a>static 关键字</h4><p>static关键字既可以修饰函数也可以修饰变量，用来定义静态函数和静态变量。其作用是根据其作用域来决定的。</p>
+<h3 id="关键字"><a href="#关键字" class="headerlink" title="关键字"></a>关键字</h3><h4 id="static-关键字"><a href="#static-关键字" class="headerlink" title="static 关键字"></a>static 关键字</h4><p>static关键字既可以修饰函数也可以修饰变量，用来定义静态函数和静态变量。其作用是根据其作用域来决定的。</p>
 <ul>
 <li><p>当static关键字的作用域为整个文件时(即全局静态变量/函数)</p>
 <ul>
