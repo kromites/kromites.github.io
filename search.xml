@@ -119,7 +119,7 @@
 <figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span>&#123;</span></span><br><span class="line">	<span class="built_in">A</span>(<span class="keyword">const</span> A&amp; tmp);				<span class="comment">// 拷贝构造函数</span></span><br><span class="line">    A&amp; <span class="keyword">operator</span>=(<span class="keyword">const</span> A &amp;tmp);		<span class="comment">// 赋值函数</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
 <p>如果其中的<code>A(const A&amp; tmp)</code> 变为<code>A(const A temp)</code>,那么<code>const A temp</code>这个形参和实参<code>A b(a)</code>相结合的时候是<strong>要调用本类的拷贝构造函数，这样的话就成了死循环！</strong></p>
-<p><img src="/.io//%E9%9D%A2%E5%90%91%E5%AF%B9%E8%B1%A1%5C%E6%8B%B7%E8%B4%9D%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0.jpg" alt="拷贝构造函数"></p>
+<p><img src="/.io//cpctor.jpg" alt="cpctor"></p>
 <h4 id="为什么会使用初始化列表？"><a href="#为什么会使用初始化列表？" class="headerlink" title="为什么会使用初始化列表？"></a>为什么会使用初始化列表？</h4><ul>
 <li><p>当没有初始化列表之前，对象的成员变量初始化动作是在调用默认构造函数的时候发生的，因此对成员变量初始化，最开始是必须得调用一次默认构造函数。</p>
 </li>
