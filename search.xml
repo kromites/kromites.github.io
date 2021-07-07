@@ -1,6 +1,319 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
+    <title>I/O多路复用</title>
+    <url>/posts/7ce262fd/</url>
+    <content><![CDATA[<blockquote>
+<p>在网络编程中熟知的一个方法。nignx和redis中都实现了该方法，属于网络编程中的基本概念</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h3 id="基本介绍"><a href="#基本介绍" class="headerlink" title="基本介绍"></a>基本介绍</h3><p>​    I/O多路复用是指程序在单个线程内通过记录每个I/O流的状态，来同时管理多个I/O流。这样使得程序能够在单线程内同时监听多个文件描述符。</p>
+<p>   不过值得注意的是，I/O复用虽然能同时监听多个文件描述符，但是其本身是阻塞的。并且当多个文件描述符同时就绪时，如果不采取额外措施，程序就只能按顺序依次处理其中的每个文件描述符。</p>
+<p>​    虽然是能够在单个线程同时监听多个文件描述符，但是文件描述符就绪依旧是串行处理，明白这一点就不会将I/O多路复用和并发混淆，因为串行处理事件并不是并发。</p>
+<p>​    I/O多路复用有三种熟知的具体实现，分别是Select，Poll 和 Epoll，下面来依次介绍它们。</p>
+<h3 id="SELECT系统调用"><a href="#SELECT系统调用" class="headerlink" title="SELECT系统调用"></a>SELECT系统调用</h3><p>​    用途：在指定时间内，<strong>监听用户感兴趣的文件描述符上的可读，可写和异常事件</strong>。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/select.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">select</span><span class="params">( <span class="keyword">int</span> nfds, fd_set* readfds, fd_set* writefds, fd_set* exceptfds, struct timeval* timeout)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>​    由上面的API可以看出，nfds是感兴趣的fd总数，后面三个参数分别是三种fd的集合，最后一个时间参数是指定时间，如果超过时间直接返回。</p>
+<pre><code> 而`fd_set`结构体仅仅包含一个整形数组，**该数组的每个元素的每一位标记一个fd。**fd_set能容纳的文件描述符最大数量优先，应该是2^16。
+</code></pre>
+<p>​    这是select最大的缺点：</p>
+<ul>
+<li><p><strong>每次去查看文件描述符的状态都要按位去轮询整个数组，O（N），效率不高</strong></p>
+</li>
+<li><p><strong>而且存储的文件描述符有上限，只能存储几万个</strong>（这个很少，fd的上限能够达到上百万个）</p>
+</li>
+<li><p>非线程安全</p>
+</li>
+</ul>
+<h3 id="POLL系统调用"><a href="#POLL系统调用" class="headerlink" title="POLL系统调用"></a>POLL系统调用</h3><p>​    poll和select类似，也是在<strong>指定时间轮询一定数量的文件描述符</strong>，以测试其中是否有就绪者。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;poll.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pollfd</span>&#123;</span></span><br><span class="line">  	<span class="keyword">int</span> fd;				<span class="comment">// 文件描述符</span></span><br><span class="line">    <span class="keyword">short</span> events;		<span class="comment">// 注册的事件</span></span><br><span class="line">    <span class="keyword">short</span> revents;		<span class="comment">// 活跃的事件，由内核填充</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">poll</span><span class="params">(struct pollfd* fds, <span class="keyword">nfds_t</span> nfds, <span class="keyword">int</span> timeout)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>​    看到这个API其实和select也是有点差别的。</p>
+<ul>
+<li>存放文件描述符的数据结构从数组位变成了</li>
+<li>事件类型区分更为细致，select只有三种时间类型，而poll将其细化了。如可读事件分为了POLLIN,POLLRDNORM, POLLDRBAND, POLLPRI四种。</li>
+</ul>
+<p>不过nfds和timoeout参数都和select相似，这里不赘述。</p>
+<p>其缺点也和select类似，</p>
+<ul>
+<li>遍历所有fd，不活跃fd也会去检查它的状态，O(N)</li>
+<li>线程不安全</li>
+</ul>
+<p>不过因为不是通过数组位存储，因此无上限太低的缺点。</p>
+<h3 id="EPOLL系统调用"><a href="#EPOLL系统调用" class="headerlink" title="EPOLL系统调用"></a>EPOLL系统调用</h3><p>接下来就迎来主角了，epoll是Linux特有的I/O复用函数，其实现和前两者有较大差异。</p>
+<p>优点</p>
+<ul>
+<li>epoll使用一组函数实现多路复用，前两者都只有单个函数</li>
+<li>epoll将用户关心的文件描述符上的事件放在内核里的一个事件表中，无需O(N)，只需要O(1)地查看关心的事件</li>
+<li>检查文件描述符是否就绪的方法更好，epoll采用回调的机制，而前两者采用的轮询机制，随着fd增加，回调效率不怎么降低，而轮询会大大降低。</li>
+<li>线程安全</li>
+</ul>
+<p>略有瑕疵的缺点</p>
+<ul>
+<li>内核事件表需要额外一个文件描述符表示，浪费了一个文件描述符</li>
+<li>只能在Linux上用</li>
+</ul>
+<h4 id="epoll事件表"><a href="#epoll事件表" class="headerlink" title="epoll事件表"></a>epoll事件表</h4><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/epoll.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">epoll_create</span><span class="params">(<span class="keyword">int</span> size)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p><strong>该API创建一个内核事件表，返回与该事件表绑定的文件描述符。</strong>size无多大含义，只是通知内核告诉它事件表多大。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/epoll.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">epoll_event</span>&#123;</span></span><br><span class="line">  	<span class="keyword">uint32_t</span> events; 	<span class="comment">// epoll 事件</span></span><br><span class="line">    <span class="keyword">epoll_data_t</span> data;	<span class="comment">// 用户数据</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">union</span> <span class="title">epoll_data</span>&#123;</span></span><br><span class="line">    <span class="keyword">void</span>* ptr;</span><br><span class="line">    <span class="keyword">int</span> fd;</span><br><span class="line">    <span class="keyword">uint32_t</span> u32;</span><br><span class="line">    <span class="keyword">uint64_t</span> u64;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">epoll_ctl</span><span class="params">(<span class="keyword">int</span> epfd, <span class="keyword">int</span> op, <span class="keyword">int</span> fd, struct epoll_event *event)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p><strong>该API用来操作已创建的内核事件表。</strong></p>
+<p>参数分析：</p>
+<ul>
+<li><p>epfd是负责内核事件表的文件描述符</p>
+</li>
+<li><p>fd是要操作的文件描述符，op是操作类型：</p>
+<ul>
+<li>EPOLL_CTL_ADD：往事件表注册fd上的事件</li>
+<li>EPOLL_CTL_MOD：修改fd上的注册事件</li>
+<li>EPOLL_CTL_DEL：删除fd上的注册事件</li>
+</ul>
+</li>
+<li><p>event参数指定事件。事件类型存储在event-&gt;events中。epoll的事件类型和poll类似，只不过在前面加了个E，不过epoll有两种额外的事件——EPOLLET和EPOLLONESHOT。这个后面再讲。</p>
+</li>
+<li><p>返回值：成功回0，失败回-1并设置errno。</p>
+</li>
+</ul>
+<h4 id="epoll-wait"><a href="#epoll-wait" class="headerlink" title="epoll_wait"></a>epoll_wait</h4><p>​    epoll的主要接口是epoll_wait函数。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/epoll.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">epoll_wait</span><span class="params">(<span class="keyword">int</span> epfd, struct epoll_event* events, <span class="keyword">int</span> maxevents, <span class="keyword">int</span> timeout)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p><strong>该API在一段超时时间内等待一组文件描述符上的事件。</strong></p>
+<p>参数：</p>
+<ul>
+<li>maxevents 指定最多能够监听多少个事件，必须大于0</li>
+</ul>
+<p><strong>如果检测到事件</strong>，就将所有就绪的事件从内核事件表（由epfd指定）中复制到它的第二个参数events指向的数组中。<strong>这个数组只用于输出epoll_wait检测到的就绪事件，而不像前两者的数组参数那样即用于传入用户注册的事件，又用于输出检测的内核事件。这样极大提高了应用程序索引就绪文件描述符的效率。</strong>（目前还是LT模式的效率提升，因为是检测到事件就返回）</p>
+<h4 id="ET和LT模式"><a href="#ET和LT模式" class="headerlink" title="ET和LT模式"></a>ET和LT模式</h4><p>​    epoll对fd的操作用两种模式:ET和LT。其中LT是默认工作模式，这个模式下就是效率提升版的poll。当往epoll内核事件表中注册一个文件描述符上的EPOLLET时间事，epoll工作模式变成了ET，ET是epoll的高效模式。</p>
+<p>​    采用LT模式时，如果检测到有事件发生时，epoll_wait将此事通知给应用程序，应用程序可以不处理它，但是下次调用epoll_wait依旧会通知应用程序来处理它。</p>
+<p>​    而ET模式不同，ET模式当通知了应用程序，应用程序必须立即处理该事件，因为后续的epoll_wait调用不再向应用程序通知这一事件。这样一来极大降低了同一事件被重复触发的次数（但是可能通知了没处理直接被漏掉了吗？思考一下）</p>
+<p>​    形象的说就是<strong>LT模式是传统的调用epoll_wait有活跃事件就触发（可读事件缓冲区不为空，可写事件缓冲区不满），而ET是增量触发，只有新事件到来才会通知应用程序。</strong></p>
+<p>​    （ET必须是非阻塞的！）</p>
+<h4 id="EPOLLSHOT事件"><a href="#EPOLLSHOT事件" class="headerlink" title="EPOLLSHOT事件"></a>EPOLLSHOT事件</h4><p>​    即使我们使用ET模式，<strong>一个socket上的某个事件还是可能被触发多次</strong>。这在并发程序中会引起一个问题。比如一个线程在读取完某个socket上的数据后开始处理这些数据，在处理数据过程中又有新数据可读，这样新的线程唤醒去读新数据，那么就出现了<strong>两个线程同时操作一个socket的局面</strong>。但是我们期望的是<strong>一个socket连接在任一时刻都只被一个线程处理。（因为这会导致线程同步问题）</strong></p>
+<p>​    这里就可以采用EPOLLSHOT事件，对于注册该事件的fd，<strong>操作系统最多出发其上注册的一个可读、可写或者一长时间，且只触发一次。</strong>这样当一个线程处理这socket，其他线程不能处理该socket。</p>
+<p>​    但是反过来思考一下，只触发一次，那下次怎么办？因此触发这一次之后要重置EPOLLSHOT事件，进而让其他工作线程之后有机会处理该socket</p>
+<h3 id="三种系统调用的对比"><a href="#三种系统调用的对比" class="headerlink" title="三种系统调用的对比"></a>三种系统调用的对比</h3><p>​    这三组系统调用都通过某种结构体变量来告诉内核监听那些文件描述符上的哪些事件，并使用该结构体类型的参数来获取内核处理的结果。</p>
+<table>
+<thead>
+<tr>
+<th align="center">类别</th>
+<th align="center">SELECT</th>
+<th align="center">POLL</th>
+<th align="center">EPOLL</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">使用数据结构</td>
+<td align="center">三个数组构成的位图</td>
+<td align="center">统一数据结构<code>epollfd</code></td>
+<td align="center">同一数据结构，内核注册表</td>
+</tr>
+<tr>
+<td align="center">事件类型</td>
+<td align="center">最基本的三种：可读、可写、异常</td>
+<td align="center">带有优先级的事件类型，区分更细致</td>
+<td align="center">和poll类似，多了ET和SHOT</td>
+</tr>
+<tr>
+<td align="center">事件监听机制</td>
+<td align="center">轮询</td>
+<td align="center">轮询</td>
+<td align="center">回调</td>
+</tr>
+<tr>
+<td align="center">时间复杂度</td>
+<td align="center">O(N)</td>
+<td align="center">O(N)</td>
+<td align="center">O(1)</td>
+</tr>
+<tr>
+<td align="center">优点</td>
+<td align="center">多平台可用，简单</td>
+<td align="center">多平台可用，简单，上限比select高</td>
+<td align="center">高效，LT模式下就是O(1)，ET模式下更是减少同一事件的多次触发，线程安全</td>
+</tr>
+<tr>
+<td align="center">缺点</td>
+<td align="center">低效，处理的fd有上限，非线程安全</td>
+<td align="center">低效，非线程安全</td>
+<td align="center">仅LINUX可用</td>
+</tr>
+</tbody></table>
+<p><strong>PS：虽然epoll的性能最好，但是在连接数少并且连接都十分活跃的情况下，select和poll的性能可能比epoll好，毕竟epoll的通知机制需要很多函数回调。</strong></p>
+]]></content>
+      <categories>
+        <category>网络编程</category>
+      </categories>
+      <tags>
+        <tag>I/O多路复用</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>LRU</title>
+    <url>/posts/154d371b/</url>
+    <content><![CDATA[<blockquote>
+<p>LRU全称Least Recently Used, 最少最近使用。该算法广泛应用在各个项目中，比如redis缓存，页面置换算法等。</p>
+<p>本篇文章记录一下如何设计一个LRU数据结构。</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h3 id="算法介绍："><a href="#算法介绍：" class="headerlink" title="算法介绍："></a>算法介绍：</h3><p><strong>设计类的算法最大的困难点选取合适的数据结构</strong></p>
+<ul>
+<li><p>算法链接：<a href="https://leetcode-cn.com/problems/lru-cache/">146. LRU 缓存机制</a></p>
+</li>
+<li><p>算法介绍：Least Recently Used， 在O(1)时间复杂度内进行put和get两个操作。</p>
+<p>put：将新数据放入LRU中； get：获得最近使用的数据。（放入的数据是一个键值对）</p>
+</li>
+<li><p>算法实现： 本题目就是为了设计一个LRU数据结构。这个数据结构首先需要接收一个capacity参数作为缓存最大容量。</p>
+<p>这里的话我们可以用链表来存储数据，<code>list&lt;pair&lt;int,int&gt;&gt;</code>, 因为这里要实现O(1)的插入。 那要实现O(1)的查找该怎么办呢？用哈希表来实现。 总而言之，我们最后选用一个复合数据结构—–&gt; <strong>哈希链表</strong>（哈希表和链表组合）</p>
+</li>
+</ul>
+<p>最终，经过分析，选取了哈希链表，但是如何利用C++的优势简化哈希双向链表的实现？ 我们可以采用迭代器<code>iterator</code></p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LRUCache</span>&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span></span>;</span><br><span class="line">    <span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>;</span><br><span class="line">    </span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="keyword">int</span> cap_;										<span class="comment">// cap_ save the capacity of lru</span></span><br><span class="line">    <span class="comment">// 传统双向链表</span></span><br><span class="line">    <span class="keyword">using</span> DoubleList = list&lt;pair&lt;<span class="keyword">int</span>, <span class="keyword">int</span>&gt;&gt;; 		<span class="comment">// pair save (key, value);</span></span><br><span class="line">    DoubleList L;</span><br><span class="line">    <span class="comment">// 哈希表存储迭代器</span></span><br><span class="line">    unordered_map&lt;<span class="keyword">int</span>, DoubleList::iterator&gt; M; 	<span class="comment">// hashmap -&gt; &#123;key : iterator&#125;;</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>设计好了合适的数据结构，代码便只需要写接口就行</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LRUCache</span>&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    LRUCache(<span class="keyword">int</span> capacity):cap_(capacity) &#123;&#125;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span></span>&#123;</span><br><span class="line">        <span class="comment">// 放入lru中的话，两种情况</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">auto</span> it = M.find(key);</span><br><span class="line"></span><br><span class="line">         <span class="comment">// 1. 本身该key就在list中, 先把索引值删除</span></span><br><span class="line">        <span class="keyword">if</span>(it != M.end())</span><br><span class="line">            L.erase(it-&gt;second);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 删除完之后就转入第二种情况，链表中没有这个键值对。</span></span><br><span class="line">        <span class="comment">// 在链表最前面添加key,value 键值对</span></span><br><span class="line">        L.push_front(<span class="built_in">make_pair</span>(key, value));</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 并且将其在mp登记他</span></span><br><span class="line">        M[key] = L.begin();</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">        <span class="comment">// 如果链表超过容量，那么删除最远的那组</span></span><br><span class="line">        <span class="keyword">if</span>(L.size() &gt; cap_)&#123;</span><br><span class="line">            <span class="keyword">int</span> key = L.back().first;</span><br><span class="line">            M.erase(key);</span><br><span class="line">            L.pop_back();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>&#123;</span><br><span class="line">        <span class="comment">// 调用的话，记得调用完调用结果要放到首位去</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">auto</span> it = M.find(key);</span><br><span class="line">        <span class="keyword">if</span>(it == M.end())   <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> value = it-&gt;second-&gt;second;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 删除原先的位置并把其放到首位</span></span><br><span class="line">        L.erase(it-&gt;second);</span><br><span class="line">        L.push_front(<span class="built_in">make_pair</span>(key, value));</span><br><span class="line"></span><br><span class="line">        M[key] = L.begin();</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> value;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="keyword">int</span> cap_;										<span class="comment">// cap_ save the capacity of lru</span></span><br><span class="line">    <span class="comment">// 传统双向链表</span></span><br><span class="line">    <span class="keyword">using</span> DoubleList = <span class="built_in">list</span>&lt;<span class="built_in">pair</span>&lt;<span class="keyword">int</span>, <span class="keyword">int</span>&gt;&gt;; 		<span class="comment">// pair save (key, value);</span></span><br><span class="line">    DoubleList L;</span><br><span class="line">    <span class="comment">// 哈希表存储迭代器</span></span><br><span class="line">    <span class="built_in">unordered_map</span>&lt;<span class="keyword">int</span>, DoubleList::iterator&gt; M; 	<span class="comment">// hashmap -&gt; &#123;key : iterator&#125;;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>至此，一个简易版的LRU算法就写好了，这个LRU算法不算难，但是由于之前的算法题目一般都是函数式编程，只需要设计好一个函数，在函数内实现功能。而这种算法设计相当于是在设计一个类，不仅仅要考虑到函数内的实现，其难点还在于如何设计一个良好的数据结构以及如何去应用它。</p>
+]]></content>
+      <categories>
+        <category>算法</category>
+      </categories>
+      <tags>
+        <tag>LRU</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>RedisSDS</title>
+    <url>/posts/ddef0534/</url>
+    <content><![CDATA[<blockquote>
+<p>Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。</p>
+</blockquote>
+<span id="more"></span>
+
+<h3 id="1-SDS的定义"><a href="#1-SDS的定义" class="headerlink" title="1 SDS的定义"></a>1 SDS的定义</h3><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sds.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span>&#123;</span></span><br><span class="line">    <span class="comment">// 记录buf数组中已使用字节的数量</span></span><br><span class="line">    <span class="comment">// 等于SDS所保存的字符串长度</span></span><br><span class="line">    <span class="keyword">int</span> len;</span><br><span class="line">    <span class="comment">// 记录buf数组中未使用字节的数量</span></span><br><span class="line">    <span class="keyword">int</span> <span class="built_in">free</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 字节数组，用于保存字符串</span></span><br><span class="line">    <span class="keyword">char</span> buf[];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><em>tag： 由于SDS遵循C字符串以空字符结尾的惯例， 保存空字符的1字节空间不计算在SDS的Len属性里面，并且为空字符自动生成一个字节空间</em></p>
+<h3 id="2-SDS和C字符串的区别"><a href="#2-SDS和C字符串的区别" class="headerlink" title="2 SDS和C字符串的区别"></a>2 SDS和C字符串的区别</h3><p>​    由于Redis对字符串在安全性，效率以及功能上都有需求， 因此SDS比传统字符串有着不少优化。</p>
+<ul>
+<li><p><strong>常数复杂度获取字符串长度</strong></p>
+<p>C字符串获取长度靠<code>strlen</code>(O(n)), Redis是靠着<code>sds.len</code>直接获得。</p>
+</li>
+<li><p><strong>杜绝缓冲区的溢出</strong></p>
+<p>C字符串容易造成缓冲区的溢出，而SDS的空间分配策略完全杜绝了发生缓冲区溢出的可能性：当SDS的API需要对SDS进行修改时，API会先检查SDS的空间是否满足修改所需的要求。如果不满足，那么就会执行空间扩展工作。</p>
+</li>
+<li><p><strong>减少修改字符串时带来的内存重分配次数</strong></p>
+<ul>
+<li><p>C字符串被增长或者缩短时，程序都要对该字符串进行一次内存重分配操作。</p>
+</li>
+<li><p>针对未使用空间<code>sds.free</code>， SDS解除了字符串长度和底层数组长度之间的关联。从而实现了<strong>空间预分配和惰性空间释放</strong>两种优化策略。</p>
+<ul>
+<li><p>空间预分配： 当API对一个SDS进行修改，并且需要对SDS进行空间扩展的时候，程序<strong>不仅会为SDS分配修改所必须要的空间，还会分配额外的未使用空间</strong>。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 分配机制</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span> <span class="title">sds</span>;</span></span><br><span class="line"><span class="keyword">int</span> needlen;			<span class="comment">// sds字符串需要存储的字符串长度</span></span><br><span class="line"><span class="keyword">if</span>(sds.len &lt; <span class="number">1024</span>*<span class="number">1024</span>)	<span class="comment">// 1024*1024 = 1MB</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 分配空间至len</span></span><br><span class="line">    sds.len = needlen;</span><br><span class="line">    sds.<span class="built_in">free</span> = sds.len <span class="comment">// 保持一样</span></span><br><span class="line">    <span class="comment">//so strlen(sds.buf) = len + free + 1;</span></span><br><span class="line">&#125;<span class="keyword">else</span>&#123;</span><br><span class="line">    sds.len = needlen;</span><br><span class="line">    sds.<span class="built_in">free</span> = <span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+<li><p>惰性空间释放： 用于优化SDS的字符串缩短操作。 API需要缩短SDS保存的字符串时，程序并不立即使用内存重分配来回收缩短后多出来的字节，而是使用free属性将这些字节的数量纪录起来，并等待将来使用。</p>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong>二进制安全</strong></p>
+<ul>
+<li><p>C字符串中的字符必须符合某种编码(如ASCII),并且<strong>除了字符串的末尾之外，字符串里面不能含有空字符</strong>（这个是因为程序读C字符串遇到空字符就默认这是字符串结尾）。 由于这些限制，<strong>C字符串只能保存文本数据，而不能保存像图片、音频、视频压缩文件这些二进制数据。</strong></p>
+</li>
+<li><p>SDS中的buf数组，既可以保存一系列字符，也可以保存一系列二进制数据。（其实可以理解为该数组可以保存空字符串，因为长度是已知的，程序不需要通过空字符串的位置判断这个字符串是否结束）</p>
+</li>
+</ul>
+</li>
+<li><p><strong>兼容部分C字符串函数</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="built_in">strcat</span>(s_string, sds-&gt;buf);</span><br><span class="line"><span class="comment">// 可以使用str相关的api</span></span><br></pre></td></tr></table></figure></li>
+<li><p><strong>总结</strong></p>
+<ul>
+<li>C字符串：<ul>
+<li>获取字符串长度的时间复杂度是O(N)</li>
+<li>API不安全，可能会造成缓冲区溢出</li>
+<li>修改字符串长度N次<strong>必然</strong>需要执行N次内存重分配</li>
+<li>只能保存文本数据</li>
+<li>可以使用<strong>所有</strong><code>&lt;string.h&gt;</code>的库函数</li>
+</ul>
+</li>
+<li>SDS：<ul>
+<li>获取字符串长度的时间复杂度是O(1)</li>
+<li>AP安全，不会造成缓冲区溢出</li>
+<li>修改字符串长度N次<strong>最多</strong>需要执行N次内存重分配</li>
+<li>能保存文本数据和二进制数据</li>
+<li>可以使用<strong>一部分</strong><code>&lt;string.h&gt;</code>的库函数</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-SDS-API"><a href="#3-SDS-API" class="headerlink" title="3 SDS API"></a>3 SDS API</h3><p>​    |       函数        |                                  作用                                     |                          时间复杂度</p>
+<ul>
+<li><p><code>sdsnew</code>           创建一个包含给定C字符串的SDS                          <code>O(N), N = strlen(str)</code></p>
+</li>
+<li><p><code>sdsempty</code>       创建一个不包含任何内容的空SDS                        <code>O(1)</code></p>
+</li>
+<li><p><code>sdsfree</code>         释放给定的SDS                                                       <code>O(N), N = strlen(str)</code></p>
+</li>
+<li><p><code>sdslen</code>           返回SDS已使用空间字节数                                    <code>O(1), get from sds-&gt;len</code></p>
+</li>
+<li><p><code>sdsavail </code>       返回SDS未使用空间字节数                                    <code>O(1), get from sds-&gt;free</code></p>
+</li>
+<li><p><code>sdsdup</code>           创建一个给定SDS的副本(copy)                             <code>O(N), N = strlen(str)</code></p>
+</li>
+<li><p><code>sdsclear</code>       清空SDS保存的字符串内容                                    <code>O(1), 惰性空间释放策略！</code>  -&gt; <strong>mark</strong></p>
+</li>
+<li><p><code>sdscat</code>           将给定C字符串拼接到SDS字符串的末尾               <code>O(N)，N = strlen(str) </code></p>
+</li>
+<li><p><code>sdscatsds</code>     将给定SDS字符串拼接到另一个SDS字符串末尾   <code>O(N)，N = strlen(str)</code></p>
+</li>
+<li><p><code>sdscpy</code>           <strong>将给定C字符串复制到SDS里面，</strong></p>
+<p>​                            <strong>覆盖SDS原有字符串</strong>                                              <code>O(N)，N = strlen(str)</code></p>
+</li>
+<li><p><code>sdsgrowzero</code>  用空字符将SDS扩展至给定长度                            <code>O(N),N为扩展新增的字节数</code></p>
+</li>
+<li><p><code>sdsrange</code>       保留SDS给定区间内的数据，</p>
+<p>​                        不在区间内的数据会被覆盖或清除                          <code>O(N),N为保留数据的字节数</code></p>
+</li>
+<li><p><code>sdstrim</code>         接收一个SDS和一个C字符串作为参数，                <code>O(N*M),M为SDS的长度，N为给定C字符串的长度</code></p>
+<p>​                        从SDS左右两端分别移除所有在C字符串中出现过的字符   </p>
+</li>
+<li><p><code>sdscmp</code>           比较两个SDS字符串是否相同                                 <code>O(N), N为两个SDS中较短的那个SDS的长度</code>                </p>
+</li>
+</ul>
+]]></content>
+      <categories>
+        <category>Redis</category>
+      </categories>
+      <tags>
+        <tag>Redis</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Hello World</title>
+    <url>/posts/4a17b156/</url>
+    <content><![CDATA[<p>Welcome to <a href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
+<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/writing.html">Writing</a></p>
+<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/server.html">Server</a></p>
+<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/generating.html">Generating</a></p>
+<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
+]]></content>
+  </entry>
+  <entry>
     <title>博客介绍</title>
     <url>/posts/e627a59/</url>
     <content><![CDATA[<blockquote>
@@ -25,6 +338,73 @@
       </categories>
       <tags>
         <tag>博客</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>排序算法</title>
+    <url>/posts/735e5788/</url>
+    <content><![CDATA[<blockquote>
+<p> 各类排序算法是一个很基础的算法概念，在面试当中，手撕排序算法也只算得上一道简单题。</p>
+</blockquote>
+<span id="more"></span>
+
+<p>排序算法一般可分为 快速排序， 归并排序，插入排序，冒泡排序，选择排序和堆排序。（其中快排，归并和堆排序比较难，但是要掌握）</p>
+<h3 id="C-中的std-sort"><a href="#C-中的std-sort" class="headerlink" title="C++中的std::sort"></a>C++中的<code>std::sort</code></h3><p>​    sort算法主体是一个快速排序，快速排序的时间复杂度为<code>O(NlogN)</code>，但是其对效率有了优化。</p>
+<p>首先，快速排序在小区间的效率不如插入排序，因此在小空间的话，就用<strong>插入排序</strong>。 而且快速排序是基于递归的，因此如果数据过大，递归层数过大，这就要转入<strong>堆排序</strong> 。</p>
+<p>然后，快速排序的效率取决于pivot的取法，如果pivot取得适中，那么效率最高。因此标准库里面用的是<strong>九取一，</strong>这可以尽可能使得pivot的取值更合理。</p>
+<h3 id="经典排序模板"><a href="#经典排序模板" class="headerlink" title="经典排序模板"></a>经典排序模板</h3><h4 id="1-快速排序"><a href="#1-快速排序" class="headerlink" title="1.     快速排序"></a>1.     快速排序</h4><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">quicksort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (l + <span class="number">1</span> &gt;= r)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// key is the pivot element </span></span><br><span class="line">	<span class="keyword">auto</span> first = l, last = r - <span class="number">1</span>, key = nums[first];</span><br><span class="line">	<span class="keyword">while</span>(first &lt; last) &#123;</span><br><span class="line">		<span class="comment">// deal with the element from the last</span></span><br><span class="line">		<span class="keyword">while</span> (first &lt; last &amp;&amp; nums[last] &gt;= key) &#123;</span><br><span class="line">			--last;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// swap and pivot become to the nums[last]</span></span><br><span class="line">		nums[first] = nums[last];</span><br><span class="line"></span><br><span class="line">		<span class="comment">// deal wiht the element from the first</span></span><br><span class="line"></span><br><span class="line">		<span class="keyword">while</span>(first &lt; last &amp;&amp; nums[first] &lt;= key) &#123;</span><br><span class="line">			++first;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// swap </span></span><br><span class="line">		nums[last] = nums[first];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// put the pivot on the correct position, sun first is the division line</span></span><br><span class="line">	nums[first] = key;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// recursion</span></span><br><span class="line">	<span class="built_in">quicksort</span>(nums, l, first);</span><br><span class="line">	<span class="built_in">quicksort</span>(nums, first + <span class="number">1</span>, r);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>​    </p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 基于partition的排序</span></span><br><span class="line"><span class="comment">// algorithms 4th 所实现的</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">partition</span><span class="params">(std::vector&lt;<span class="keyword">int</span>&gt;&amp; nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">int</span> first = l, last = r+<span class="number">1</span>, key = nums[first];</span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> (<span class="literal">true</span>) &#123;</span><br><span class="line">		<span class="keyword">while</span> (nums[++first] &lt; key) &#123;</span><br><span class="line">			<span class="keyword">if</span> (first == r)</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">while</span> (nums[--last] &gt; key) &#123;</span><br><span class="line">			<span class="keyword">if</span> (last == l)</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (first &gt;= last)</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		std::<span class="built_in">swap</span>(nums[first], nums[last]);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	std::<span class="built_in">swap</span>(nums[l], nums[last]);</span><br><span class="line">	<span class="keyword">return</span> last;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">quicksort</span><span class="params">(std::vector&lt;<span class="keyword">int</span>&gt;&amp; nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (r &lt;= l)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line">	<span class="keyword">int</span> last = <span class="built_in">partition</span>(nums, l, r);</span><br><span class="line">	<span class="built_in">quicksort</span>(nums, l, last - <span class="number">1</span>);</span><br><span class="line">	<span class="built_in">quicksort</span>(nums, last + <span class="number">1</span>, r);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="2-归并排序"><a href="#2-归并排序" class="headerlink" title="2.     归并排序"></a>2.     归并排序</h4><p>方法：采用一个临时空间，将划分成两部分空间在这个临时空间中排好序，然后再放入原空间数组中。</p>
+<p>步骤： 先divide，然后recursion， 再deal with。</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">mergesort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r, vector&lt;<span class="keyword">int</span>&gt; &amp;temp)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">if</span>(l + <span class="number">1</span> &gt;= r)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line">	<span class="comment">// divide, recursion first</span></span><br><span class="line">	<span class="keyword">int</span> m = l + (r - l) / <span class="number">2</span>;</span><br><span class="line">	<span class="built_in">mergesort</span>(nums, l, m, temp);</span><br><span class="line">	<span class="built_in">mergesort</span>(nums, m, r, temp);</span><br><span class="line"></span><br><span class="line">	<span class="comment">// conquer</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">int</span> p = l, q = m, i = l;</span><br><span class="line">	<span class="keyword">while</span>(p &lt; m || q &lt; r) &#123;</span><br><span class="line">		<span class="keyword">if</span> (q &gt;= r || (p &lt; m &amp;&amp; nums[p] &lt;= nums[q]))</span><br><span class="line">			temp[i++] = nums[p++];</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			temp[i++] = nums[q++];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (i = l; i &lt; r; ++i) &#123;</span><br><span class="line">		nums[i] = temp[i];</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="3-插入排序"><a href="#3-插入排序" class="headerlink" title="3.     插入排序"></a>3.     插入排序</h4><p>这个没什么讲的，反正记得<strong>插入排序是基于<code>swap</code>的</strong>就行</p>
+<figure class="highlight mipsasm"><table><tr><td class="code"><pre><span class="line">void <span class="keyword">insertsort(vector&lt;int&gt; </span>&amp;nums, int n) &#123;</span><br><span class="line">	for(int i=<span class="number">0</span><span class="comment">; i&lt;n; ++i) &#123;</span></span><br><span class="line">		for(int <span class="keyword">j=i; </span><span class="keyword">j&gt;0&amp;&amp; </span>nums[<span class="keyword">j] </span>&lt; nums[<span class="keyword">j-1]; </span>--<span class="keyword">j) </span>&#123;</span><br><span class="line">			<span class="keyword">swap(nums[j], </span>nums[<span class="keyword">j </span>- <span class="number">1</span>]);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+
+
+<h4 id="4-冒泡排序"><a href="#4-冒泡排序" class="headerlink" title="4.    冒泡排序"></a>4.    冒泡排序</h4><p><strong>冒泡排序同样也是基于swap的</strong>，而且为了节省时间，swap途中会有一个bool变量，来判断后续循环是否已经有序</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">bubblesort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> n)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">bool</span> swapped;</span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">1</span>; i&lt;n; ++i) &#123;</span><br><span class="line">		swapped = <span class="literal">false</span>;</span><br><span class="line">		<span class="keyword">for</span>(<span class="keyword">int</span> j=i; j &lt; n-i+<span class="number">1</span>; ++j) &#123;</span><br><span class="line">			<span class="keyword">if</span>(nums[j] &lt; nums[j<span class="number">-1</span>]) &#123;</span><br><span class="line">				<span class="built_in">swap</span>(nums[j], nums[j - <span class="number">1</span>]);</span><br><span class="line">				swapped = <span class="literal">true</span>;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span>(!swapped)</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="5-选择排序"><a href="#5-选择排序" class="headerlink" title="5.     选择排序"></a>5.     选择排序</h4><figure class="highlight excel"><table><tr><td class="code"><pre><span class="line">void selection_sort(vector&lt;<span class="built_in">int</span>&gt;&amp; nums, <span class="built_in">int</span> <span class="built_in">n</span>) &#123;</span><br><span class="line">	<span class="built_in">int</span> <span class="built_in">mid</span>;</span><br><span class="line">	for (<span class="built_in">int</span> i = <span class="number">0</span>; i &lt; <span class="built_in">n</span> - <span class="number">1</span>; ++i) &#123;</span><br><span class="line">		<span class="built_in">mid</span> = i;</span><br><span class="line">		for (<span class="built_in">int</span> j = i + <span class="number">1</span>; j &lt; <span class="built_in">n</span>; ++j) &#123;</span><br><span class="line">			<span class="built_in">if</span> (nums[j] &lt; nums[<span class="built_in">mid</span>]) &#123;</span><br><span class="line">				<span class="built_in">mid</span> = j;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		swap(nums[<span class="built_in">mid</span>], nums[i]);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+
+
+<h4 id="6-堆排序"><a href="#6-堆排序" class="headerlink" title="6.     堆排序"></a>6.     堆排序</h4><p>基本思路：大根堆为例</p>
+<p>​    1：建立大根堆—- 将n个元素组成的无序序列构建一个大根堆</p>
+<p>​    2：交换堆元素—- 交换堆尾和堆首元素，使堆尾元素成为最大元素</p>
+<p>​    3：重建大根堆—- 将前n-1个元素组成的无序序列调整为大根堆（递归）</p>
+<p>重复执行2和3 直到整个序列都有序</p>
+<p>C++内部实现： 优先队列</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapadjust</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> len, <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">auto</span> left = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line">	<span class="keyword">auto</span> right = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">auto</span> maxIdx = index;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (left &lt; len &amp;&amp; nums[left] &gt; nums[maxIdx]) maxIdx = left;</span><br><span class="line">	<span class="keyword">if</span> (right&lt; len &amp;&amp; nums[right] &gt; nums[maxIdx]) maxIdx = right;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span>(maxIdx != index) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[maxIdx], nums[index]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, len, maxIdx);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapsort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> size)</span> </span>&#123;</span><br><span class="line">	<span class="comment">// build a heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = size / <span class="number">2</span> <span class="number">-1</span>; i &gt;= <span class="number">0</span>; --i) &#123;</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, size, i);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// adjust the heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i=size<span class="number">-1</span>; i&gt;<span class="number">0</span>; i--) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[<span class="number">0</span>], nums[i]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, i, <span class="number">0</span>);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+
+
+
+
+<p><strong>总结：手撕排序算法是面试中最基本的技能，不仅要能口头描述出这些排序的用法和效率，还得在面试官需要的时候能够自己写出实现的代码并进行测试。</strong></p>
+<p><strong>在这些排序中，最重要的就是堆排序和快速排序。一定要手撕和会用</strong></p>
+]]></content>
+      <categories>
+        <category>算法</category>
+      </categories>
+      <tags>
+        <tag>排序</tag>
       </tags>
   </entry>
   <entry>
@@ -157,256 +537,6 @@
       <tags>
         <tag>OOP</tag>
         <tag>Cpp语法</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>LRU</title>
-    <url>/posts/154d371b/</url>
-    <content><![CDATA[<blockquote>
-<p>LRU全称Least Recently Used, 最少最近使用。该算法广泛应用在各个项目中，比如redis缓存，页面置换算法等。</p>
-<p>本篇文章记录一下如何设计一个LRU数据结构。</p>
-</blockquote>
-<span id="more"></span>
-
-
-
-<h3 id="算法介绍："><a href="#算法介绍：" class="headerlink" title="算法介绍："></a>算法介绍：</h3><p><strong>设计类的算法最大的困难点选取合适的数据结构</strong></p>
-<ul>
-<li><p>算法链接：<a href="https://leetcode-cn.com/problems/lru-cache/">146. LRU 缓存机制</a></p>
-</li>
-<li><p>算法介绍：Least Recently Used， 在O(1)时间复杂度内进行put和get两个操作。</p>
-<p>put：将新数据放入LRU中； get：获得最近使用的数据。（放入的数据是一个键值对）</p>
-</li>
-<li><p>算法实现： 本题目就是为了设计一个LRU数据结构。这个数据结构首先需要接收一个capacity参数作为缓存最大容量。</p>
-<p>这里的话我们可以用链表来存储数据，<code>list&lt;pair&lt;int,int&gt;&gt;</code>, 因为这里要实现O(1)的插入。 那要实现O(1)的查找该怎么办呢？用哈希表来实现。 总而言之，我们最后选用一个复合数据结构—–&gt; <strong>哈希链表</strong>（哈希表和链表组合）</p>
-</li>
-</ul>
-<p>最终，经过分析，选取了哈希链表，但是如何利用C++的优势简化哈希双向链表的实现？ 我们可以采用迭代器<code>iterator</code></p>
-<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LRUCache</span>&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span></span>;</span><br><span class="line">    <span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>;</span><br><span class="line">    </span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="keyword">int</span> cap_;										<span class="comment">// cap_ save the capacity of lru</span></span><br><span class="line">    <span class="comment">// 传统双向链表</span></span><br><span class="line">    <span class="keyword">using</span> DoubleList = list&lt;pair&lt;<span class="keyword">int</span>, <span class="keyword">int</span>&gt;&gt;; 		<span class="comment">// pair save (key, value);</span></span><br><span class="line">    DoubleList L;</span><br><span class="line">    <span class="comment">// 哈希表存储迭代器</span></span><br><span class="line">    unordered_map&lt;<span class="keyword">int</span>, DoubleList::iterator&gt; M; 	<span class="comment">// hashmap -&gt; &#123;key : iterator&#125;;</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-
-<p>设计好了合适的数据结构，代码便只需要写接口就行</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LRUCache</span>&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    LRUCache(<span class="keyword">int</span> capacity):cap_(capacity) &#123;&#125;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span></span>&#123;</span><br><span class="line">        <span class="comment">// 放入lru中的话，两种情况</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">auto</span> it = M.find(key);</span><br><span class="line"></span><br><span class="line">         <span class="comment">// 1. 本身该key就在list中, 先把索引值删除</span></span><br><span class="line">        <span class="keyword">if</span>(it != M.end())</span><br><span class="line">            L.erase(it-&gt;second);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 删除完之后就转入第二种情况，链表中没有这个键值对。</span></span><br><span class="line">        <span class="comment">// 在链表最前面添加key,value 键值对</span></span><br><span class="line">        L.push_front(<span class="built_in">make_pair</span>(key, value));</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 并且将其在mp登记他</span></span><br><span class="line">        M[key] = L.begin();</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">        <span class="comment">// 如果链表超过容量，那么删除最远的那组</span></span><br><span class="line">        <span class="keyword">if</span>(L.size() &gt; cap_)&#123;</span><br><span class="line">            <span class="keyword">int</span> key = L.back().first;</span><br><span class="line">            M.erase(key);</span><br><span class="line">            L.pop_back();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>&#123;</span><br><span class="line">        <span class="comment">// 调用的话，记得调用完调用结果要放到首位去</span></span><br><span class="line"></span><br><span class="line">        <span class="keyword">auto</span> it = M.find(key);</span><br><span class="line">        <span class="keyword">if</span>(it == M.end())   <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">int</span> value = it-&gt;second-&gt;second;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 删除原先的位置并把其放到首位</span></span><br><span class="line">        L.erase(it-&gt;second);</span><br><span class="line">        L.push_front(<span class="built_in">make_pair</span>(key, value));</span><br><span class="line"></span><br><span class="line">        M[key] = L.begin();</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> value;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="keyword">int</span> cap_;										<span class="comment">// cap_ save the capacity of lru</span></span><br><span class="line">    <span class="comment">// 传统双向链表</span></span><br><span class="line">    <span class="keyword">using</span> DoubleList = <span class="built_in">list</span>&lt;<span class="built_in">pair</span>&lt;<span class="keyword">int</span>, <span class="keyword">int</span>&gt;&gt;; 		<span class="comment">// pair save (key, value);</span></span><br><span class="line">    DoubleList L;</span><br><span class="line">    <span class="comment">// 哈希表存储迭代器</span></span><br><span class="line">    <span class="built_in">unordered_map</span>&lt;<span class="keyword">int</span>, DoubleList::iterator&gt; M; 	<span class="comment">// hashmap -&gt; &#123;key : iterator&#125;;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<p>至此，一个简易版的LRU算法就写好了，这个LRU算法不算难，但是由于之前的算法题目一般都是函数式编程，只需要设计好一个函数，在函数内实现功能。而这种算法设计相当于是在设计一个类，不仅仅要考虑到函数内的实现，其难点还在于如何设计一个良好的数据结构以及如何去应用它。</p>
-]]></content>
-      <categories>
-        <category>算法</category>
-      </categories>
-      <tags>
-        <tag>LRU</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Redis数据结构</title>
-    <url>/posts/85682d75/</url>
-    <content><![CDATA[<blockquote>
-<p>redis除了有sds外，还使用了一些常见的数据结构如链表，字典，跳跃表，整数集合和压缩列表等作为其底层数据结构。在使用的同时，Redis也对这些数据结构进行了一些优化。</p>
-</blockquote>
-<!--*more*-->
-
-
-
-<h3 id="链表"><a href="#链表" class="headerlink" title="链表"></a>链表</h3><p>链表提供了高效的节点重排能力，以及顺序性的节点访问方式，并且可以通过增删节点来灵活地调整链表的长度。 由于C语言没有内置这种数据结构，所以Redis构建了自己的链表实现。</p>
-<p>使用场景：<strong>当一个列表键包含了数量比较多的元素，又或者列表中的包含的元素都是比较长的字符串时</strong>，Redis就会使用链表作为列表键的底层实现。</p>
-<h4 id="链表和链表节点的实现"><a href="#链表和链表节点的实现" class="headerlink" title="链表和链表节点的实现"></a>链表和链表节点的实现</h4><p>链表我们都很熟悉，一般可以用一个struct来实现</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">/* 双端链表节点 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ListNode</span>&#123;</span></span><br><span class="line">    <span class="keyword">void</span>* value; <span class="comment">// node 节点值</span></span><br><span class="line">    ListNode* prev;	<span class="comment">// 前驱</span></span><br><span class="line">    ListNode* next; <span class="comment">// 后置</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<p>虽然只要使用多个<code>ListNode</code>就能够组成链表。但是这个双端链表给的信息不是很多，Redis一般使用这个Struct来表示节点</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;adlist.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">list</span>&#123;</span></span><br><span class="line">	<span class="comment">// 表头结点</span></span><br><span class="line">    ListNode* head;</span><br><span class="line">    <span class="comment">// 表尾结点</span></span><br><span class="line">    ListNode* tail;</span><br><span class="line">    <span class="comment">// 链表所包含的节点数量</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> len;</span><br><span class="line">    <span class="comment">// 节点复制函数</span></span><br><span class="line">    <span class="keyword">void</span> *(*dup)(<span class="keyword">void</span> *ptr);</span><br><span class="line">    <span class="comment">// 节点值释放函数</span></span><br><span class="line">    <span class="keyword">void</span> (*<span class="built_in">free</span>)(<span class="keyword">void</span> *ptr);</span><br><span class="line">    <span class="comment">// 节点值对比函数</span></span><br><span class="line">    <span class="keyword">int</span> (*match)(<span class="keyword">void</span> *ptr, <span class="keyword">void</span> *key);</span><br><span class="line">	</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<p>Redis的链表特性可以总结如下：</p>
-<ul>
-<li>双端：链表节点有<code>prev</code>和<code>next</code>指针，可以O(1)时间获取节点的前驱和后置节点。</li>
-<li>无环：不是环状链表</li>
-<li>带表头指针和表尾指针：有着head和tail节点</li>
-<li>带链表长度计数器：<code> len</code>属性对链表进行技术，程序获得链表种节点数量的复杂度为O(1)</li>
-<li>多态：<code>void* value</code> 节点值的类型多态。并且可以通过三个节点函数来设置类型。链表可以用于保存各种不同类型的值。</li>
-</ul>
-<h4 id="链表和链表节点的API"><a href="#链表和链表节点的API" class="headerlink" title="链表和链表节点的API"></a>链表和链表节点的API</h4><p>详情请见《Redis设计与实现》 P22</p>
-<h3 id="字典"><a href="#字典" class="headerlink" title="字典"></a>字典</h3><p>字典又称符号表，映射。是一种用于保存键值对的抽象数据结构。(key-value)</p>
-<p>在字典中，一个key和一个value进行关联。<strong>每个key是独一无二的</strong>，用户通过寻找键来得到与之关联的值。</p>
-<p>字典也是哈希键的底层实现之一。</p>
-<h4 id="字典的实现"><a href="#字典的实现" class="headerlink" title="字典的实现"></a>字典的实现</h4><p>Redis的字典使用哈希表作为底层实现，一个哈希表里面可以有多个哈希表节点，而每个哈希表节点就保存了字典中的一个键值对</p>
-<ul>
-<li><p>哈希表：</p>
-<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;dict.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dictht</span>&#123;</span></span><br><span class="line">    <span class="comment">// 哈希表数组</span></span><br><span class="line">    <span class="comment">// table是一个数组， 数组中存放的元素是一个指向dicEntry结构的指针</span></span><br><span class="line">    <span class="comment">// dicEntry 结构保存着一个键值对</span></span><br><span class="line">    dictEntry **table;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 哈希表大小</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> size;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 哈希表大小掩码，用于计算索引值</span></span><br><span class="line">    <span class="comment">// 总是等于size-1</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> sizemask;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 该哈希表已有节点的数量</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> used;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
-<li><p>哈希表节点</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dictEntry</span>&#123;</span></span><br><span class="line">  	<span class="comment">// 键</span></span><br><span class="line">    <span class="keyword">void</span>* key;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 值</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span>&#123;</span></span><br><span class="line">        <span class="keyword">void</span> *val;</span><br><span class="line">        <span class="keyword">uint64_t</span> u64;</span><br><span class="line">        <span class="keyword">int64_t</span> s64;</span><br><span class="line">    &#125;v;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 指向下一个哈希表节点，形成链表</span></span><br><span class="line">    <span class="comment">// 这个指针可以将多个 哈希值相同 的键值对链接在一起，一次来解决键冲突的问题</span></span><br><span class="line">    dicEntry *next;</span><br><span class="line">&#125;;  </span><br></pre></td></tr></table></figure></li>
-<li><p>字典</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dict</span>&#123;</span></span><br><span class="line">    <span class="comment">// 类型特定函数</span></span><br><span class="line">    dicType* type;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 私有数据</span></span><br><span class="line">    <span class="keyword">void</span> privdata;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 哈希表</span></span><br><span class="line">    <span class="comment">// 字典只使用ht[0], h[1]哈希表会在对ht[0]哈希表进行rehash时使用。</span></span><br><span class="line">    dictht ht[<span class="number">2</span>];</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// rehash 索引</span></span><br><span class="line">    <span class="comment">// 当rehash不在进行时，设置为-1</span></span><br><span class="line">    <span class="keyword">int</span> trehashidx;      <span class="comment">/* rehashing not in progress if rehashidx == -1 */</span></span><br><span class="line">   </span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<ul>
-<li>type属性是一个指向<code>dicType</code>的指针，每个<code>dicType</code>结构保存了一簇用于操作特定类型键值对的函数，Redis会为<strong>用途不同的字典设置不同的类型特定函数。</strong></li>
-<li>而<code>privdata</code>属性则保存了需要传给那些<strong>类型特定函数的可选参数</strong> 。</li>
-</ul>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dictType</span>&#123;</span></span><br><span class="line">	<span class="comment">// 计算哈希值的函数</span></span><br><span class="line">    <span class="function"><span class="keyword">unsigned</span> <span class="title">int</span> <span class="params">(*hashFunction)</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">void</span>* key)</span></span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 复制键的函数</span></span><br><span class="line">    <span class="keyword">void</span>* (*keyDup) (<span class="keyword">void</span> *privdata, <span class="keyword">const</span> <span class="keyword">void</span>* key);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 复制值的函数</span></span><br><span class="line">    <span class="keyword">void</span>* (*valDup)(<span class="keyword">void</span> *privdata, <span class="keyword">const</span> <span class="keyword">void</span>* obj);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 对比键的函数</span></span><br><span class="line">    <span class="keyword">int</span> (*keyCompare) (<span class="keyword">void</span> *privdata, <span class="keyword">const</span> <span class="keyword">void</span>* key1, <span class="keyword">const</span> <span class="keyword">void</span>* key2);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 销毁键的函数</span></span><br><span class="line">    <span class="keyword">void</span> (*keyDestructor) (<span class="keyword">void</span> *privdata, <span class="keyword">void</span> *key);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 销毁值得函数</span></span><br><span class="line">    <span class="keyword">void</span> (*valDestructor) (<span class="keyword">void</span> *privdata, <span class="keyword">void</span> *obj);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
-</ul>
-<h4 id="哈希算法"><a href="#哈希算法" class="headerlink" title="哈希算法"></a>哈希算法</h4><p>​    当需要将一个键值对添加到字典中，程序需要先根据键值对的KEY计算出哈希值和索引值，再根据索引值，将包含新键值对的哈希表节点放到哈希表数组的制定索引上面。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">hash = dict-&gt;type-&gt;hashFunction(key);</span><br><span class="line"><span class="comment">// ht[x] 可以是 ht[0] 或者 ht[1]</span></span><br><span class="line">index = hash &amp; dict-&gt;ht[x].sizemark;</span><br></pre></td></tr></table></figure>
-
-<pre><code> Redis使用MurmurHash2算法来计算键的哈希值，这个算法的更多信息可以参考该算法的主页：[MurmurHash2算法](http://code.google.com/p/smhasher)
-</code></pre>
-<h4 id="解决键冲突"><a href="#解决键冲突" class="headerlink" title="解决键冲突"></a>解决键冲突</h4><p>​    <strong>键冲突是指当有两个或以上数量的键被分配到了哈希数组的同一索引上面。</strong>Redis使用<strong>链地址法</strong>来解决键冲突。Redis出于速度考虑，程序总是将新节点添加到链表的表头位置（复杂度为O(1)）。</p>
-<h4 id="Rehash"><a href="#Rehash" class="headerlink" title="Rehash"></a>Rehash</h4><p>rehash实际上就是二次哈希</p>
-<ul>
-<li><p>rehash的目的：随着操作不断执行，哈希表保存的键值对会逐渐地增多或者减少，<strong>为了让哈希表的负载因子（load factor）维持在一个合理的范围之内</strong>，当<strong>哈希表保存的键值对数量太多或者太少</strong>时，程序需要对哈希表的大小进行相应的扩展或收缩，这个时候用到了rehash。</p>
-</li>
-<li><p>rehash的步骤：</p>
-<ul>
-<li>为字典ht[1]哈希表分配空间，这个哈希表的空间大小取决于要执行的操作，以及ht[0]当前包含的键值对数量（也即是ht[0].used属性的值）<ul>
-<li>如果执行<strong>扩展</strong>操作， *<em>ht[1]的大小为第一个大于等于ht[0].used <em>2 的 2^n</em></em>(2的n次方幂)</li>
-<li>如果执行<strong>收缩</strong>操作，<strong>ht[1]的大小为第一个大于等于ht[0].used 的 2^n</strong>（二者是除以2的关系）</li>
-</ul>
-</li>
-<li>将保存在ht[0]中的所有键值对rehash到ht[1]上面：<strong>rehash指的是重新计算键的哈希值和索引值，然后将键值对房知道ht[1]的指定位置上。</strong></li>
-<li><strong>当ht[0]上全部键值对都转移到ht[1]上之后，释放ht[0],将ht[1]设置为ht[0], ht[1]设置为空白哈希表，为下一次rehash做好准备。</strong>（相当于ht[1]是一个后备缓存）</li>
-</ul>
-</li>
-<li><p>扩展收缩的条件</p>
-<ul>
-<li><p>扩展操作条件</p>
-<ul>
-<li>服务器目前<strong>没有</strong>执行<code>BGSAVE</code>或者<code>BGREWRITEAOF</code>命令，并且负载因子大于等于1</li>
-<li>服务器目前<strong>正在</strong>执行<code>BGSAVE</code>或者<code>BGREWRITEAOF</code>命令，并且负载因子大于等于5</li>
-</ul>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 上面两个命令相当于服务器正在创建服务器进程的子进程，由于写时复制的问题，在子程序存在期间，服务器会提高执行扩展操作使用的负载因子。从而避免在子进程存在期间进行扩展操作，以此节约内存。</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 负载因子 = 哈希表已保存节点数量 / 哈希表大小</span></span><br><span class="line">load_factor = ht[<span class="number">0</span>].used / ht[<span class="number">0</span>].size</span><br></pre></td></tr></table></figure></li>
-<li><p>收缩操作条件： 负载因子小于等于0.1</p>
-</li>
-</ul>
-</li>
-</ul>
-<h4 id="渐进式rehash"><a href="#渐进式rehash" class="headerlink" title="渐进式rehash"></a>渐进式rehash</h4><p>​    <strong>rehash动作不是一次性完成的，而是分多次、渐进式的完成。</strong>（如何渐进式完成，通过索引计数器）</p>
-<ul>
-<li><p>渐进式rehash步骤</p>
-<ul>
-<li>为ht[1]分配空间，让字典同时持有两个hash表</li>
-<li>字典中维持的索引计数器变量<code>rehashidx</code>从-1变为0，表示rehash工作正式开始</li>
-<li>在rehash进行期间，每次对字典执行添加、删除、查找或者更新操作时，程序除了执行指定操作以外，还会<strong>顺带ht[0]哈希表在<code>rehashidx</code>索引上的所有键值对rehash到ht[1]</strong>,当rehash工作完成之后，程序将<code>rehashidx</code>属性自增1</li>
-<li>随着字典不断执行，ht[0]所有键值对都会被rehash至ht[1],这时程序将<code>rehashidx</code>属性设置为-1</li>
-</ul>
-<p>索引计数器从-1到0开始，完成之后置为-1。</p>
-</li>
-</ul>
-<h3 id="跳跃表"><a href="#跳跃表" class="headerlink" title="跳跃表"></a>跳跃表</h3><p>​    <strong>跳跃表是一种有序数据结构，通过在每个节点维持多个指向其他节点的指针，从而达到快速访问节点的目的。</strong></p>
-<p>​    跳跃表TC： 平均O(logN)，最坏 O(N)进行节点查找，可以通过顺序性操作来批量处理节点。（效率高，大部分和平衡树媲美，但是比平衡树简单）</p>
-<p>​    <strong>一般用于有序集合键的底层实现</strong>，或者用于集群节点中作为内部数据结构。</p>
-<p>(特点：通过每个节点维持指向其他节点的指针来维持有序行)</p>
-<h4 id="跳跃表的实现"><a href="#跳跃表的实现" class="headerlink" title="跳跃表的实现"></a>跳跃表的实现</h4><p>redis的跳跃表有以下两个结构定义，其中一个结构用于表示跳跃表的节点，另外一个结构表示跳跃表的相关信息。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;redis.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 跳跃表节点</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span> &#123;</span></span><br><span class="line">    <span class="comment">// 后退指针</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">backward</span>;</span></span><br><span class="line">    <span class="comment">// 分值</span></span><br><span class="line">    <span class="keyword">double</span> score;</span><br><span class="line">    <span class="comment">// 成员对象</span></span><br><span class="line">    robj *obj</span><br><span class="line">    </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistLevel</span>&#123;</span></span><br><span class="line">        <span class="comment">// 前进指针</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">forward</span>;</span></span><br><span class="line">        <span class="comment">// 跨度</span></span><br><span class="line">        <span class="keyword">unsigned</span> <span class="keyword">int</span> span;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 跳跃表节点相关信息</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">zskiplist</span>&#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">header</span>;</span>	<span class="comment">// 指向跳跃变的表头节点</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">tail</span>;</span>	<span class="comment">// 指向跳跃表的表尾节点</span></span><br><span class="line">    <span class="keyword">int</span> level;				<span class="comment">// 记录跳跃表内，层数最大的那个节点层数（表头节点不计算在内）O(1)</span></span><br><span class="line">    <span class="keyword">int</span> length;				<span class="comment">// 记录跳跃表的长度，即包含节点的数量（表头节点不计入在内） O(1)</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<ul>
-<li><p>跳跃表节点：</p>
-<ul>
-<li><p>层： 跳跃表节点的level数组可以包含多个元素，每个元素都包含一个指向其他节点的指针，程序可以通过这些层来加快访问其他节点的速度，一般来说，<strong>层的数量越多，访问其他节点速度越快。</strong> 每次创建一个新跳跃表节点，程序根据幂次定律（越大的数出现概率越小）随机生成一个介于1和32之间的值作为level数组的大小，这个大小就是<strong>层的高度</strong></p>
-</li>
-<li><p>前进指针：每个层都有指向表尾方向的前进指针(level[i].forward)，用于从表头向表尾方向访问节点。（前进指针有多个）</p>
-</li>
-<li><p>跨度： 用于记录两个节点之间的距离：</p>
-<ul>
-<li>两个节点之间跨度越大，相距越远。</li>
-<li>指向nullptr的跨度都为0，因为没有连向任何节点。</li>
-</ul>
-</li>
-<li><p>后退指针：用于表尾向表头访问的节点，<strong>每个节点只有一个后退指针，只能退一个节点</strong>，后退指针最多退到头指针的后一个指针（头指针退不到）</p>
-</li>
-<li><p>分值：跳跃表中<strong>所有节点都是按照分值从小到大来排序</strong></p>
-</li>
-<li><p>成员：<strong>obj属性，指向一个字符串对象，而字符串对象则保存着一个SDS值。</strong></p>
-</li>
-</ul>
-</li>
-</ul>
-<p>另外可以保存相同分值的节点，分值相同的节点将按照成员对象在字典序中的大小进行排序，成员对象较小的节点会排在前面（靠近表头的方向），而成员对象较小的节点则会排在后面，<strong>成员对象一定是唯一的</strong></p>
-<h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><ul>
-<li>跳跃表是有序集合的底层实现之一</li>
-<li>Redis跳跃表由<code>zskiplist</code> 和<code>zskiplistNode</code> 两个结构组成，这两个结构一定要记得。</li>
-<li>每个跳跃表节点的层数是1-32之间的随机数。</li>
-<li>在同一个跳跃表中，多个节点可以包含相同的分值，但每个节点的成员对象必须是唯一的。</li>
-<li>节点按照分值大小排序，分值相同，则按照成员对象大小进行排序。</li>
-</ul>
-<h3 id="整数集合"><a href="#整数集合" class="headerlink" title="整数集合"></a>整数集合</h3><p>​    整数集合<code>intset</code>是集合键的底层实现之一，当一个集合<strong>只包含整数值元素，并且这个集合的元素数量不多</strong>时，Redis会将其作为集合键的底层实现。</p>
-<h4 id="整数集合的实现"><a href="#整数集合的实现" class="headerlink" title="整数集合的实现"></a>整数集合的实现</h4><p>​    整数集合可以保存类型为<code>int16_t, int32_t或者 int64_t</code>的整数值，并且<strong>保证集合中不会出现重复元素</strong>（毕竟是set）。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;intset.h&gt;</span></span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">intset</span>&#123;</span></span><br><span class="line">    <span class="comment">// 编码方式</span></span><br><span class="line">    <span class="keyword">uint32_t</span> encoding;</span><br><span class="line">    <span class="comment">// 集合包含的元素数量</span></span><br><span class="line">    <span class="keyword">uint_t</span> length;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 保存元素的数组</span></span><br><span class="line">    <span class="keyword">int8_t</span> contents[];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<ul>
-<li>contents 数组是整数集合的底层实现：整数集合的每个元素都是contents数组的一个数组项(items),各个项在数组中<strong>按值的大小从小到大有序地排列，并且数组中不包含任何重复项。</strong></li>
-<li>length属性记录了整数集合包含的元素数量。</li>
-</ul>
-<p>虽然contents数组类型是<code>int8_t</code>， 但是这数组并不保存任何<code>int8_t</code>类型的值，<strong>contents数组的真正类型取决于encoding属性的值。</strong></p>
-<ul>
-<li>encoding属性<ul>
-<li>如果encoding属性的值为<code>INTSET_ENC_INT16</code>,那么contents就是一个<code>int16_t</code>类型数组大小。</li>
-<li>同样的，如果为<code>INTSET_ENC_INT32</code>，则<code>int32_t</code>； 如果为<code>INTSET_ENC_INT64</code>，则<code>int64_t</code></li>
-</ul>
-</li>
-</ul>
-<h4 id="升级"><a href="#升级" class="headerlink" title="升级"></a>升级</h4><p>​    当我们要<strong>将一个新元素添加到整数集合里面，并且新元素的类型比整数集合现有所有元素的类型都要长时</strong>，整数集合需要先进行<strong>升级</strong>，才能将新元素添加到整数集合里去。</p>
-<p>​    升级并添加新元素共分为三步：</p>
-<ul>
-<li><p>根据新元素类型，扩展整数集合底层数组的空间大小，并为新元素分配空间（扩容）</p>
-</li>
-<li><p>将原有的元素转换成新元素的类型，并将类型转换后的元素放在正确的位上，在放置元素的过程中，<strong>底层数组有序性质不改变</strong>。（转类型）</p>
-</li>
-<li><p>将新元素加入底层数组。（添加新元素）</p>
-</li>
-</ul>
-<p>由于引发升级的新元素的长度总是比整数集合现有所有元素的长度都打，所以这个新元素的值要么就大于所有现有元素，要么就小于所有现有元素。</p>
-<ul>
-<li>大于现有元素，插入到最后面</li>
-<li>小于现有元素，插入到最前面</li>
-</ul>
-<p>升级的好处：</p>
-<ul>
-<li>提升整数集合的灵活性</li>
-<li>节约内存</li>
-</ul>
-<h4 id="降级"><a href="#降级" class="headerlink" title="降级"></a>降级</h4><p>​    <strong>整数集合不支持降级操作，一旦升级了，就算数组中的高位数被删除了，维持的依旧是高位。</strong></p>
-<h3 id="压缩列表"><a href="#压缩列表" class="headerlink" title="压缩列表"></a>压缩列表</h3><p>​    压缩列表是<strong>列表键和哈希键</strong>的底层实现之一。<strong>当列表键只包含少量列表项，并且每个列表项要么就是小整数值，要么就是长度比较短的字符串，那么Redis就会使用压缩列表作为底层实现</strong>。</p>
-<h4 id="压缩列表的构成"><a href="#压缩列表的构成" class="headerlink" title="压缩列表的构成"></a>压缩列表的构成</h4><p>​    压缩列表是为了节约内存而开发的，是由<strong>一系列特殊编码的连续内存块组成的顺序型数据结构。</strong>一个压缩列表可以包含任意多个节点，<strong>每个节点保存一个字节数组或者一个整数值</strong>。</p>
-<figure class="highlight angelscript"><table><tr><td class="code"><pre><span class="line">|  属性     |   类型   |   长度   |          用途</span><br><span class="line">- zlbytes	 <span class="built_in">uint</span>32_t   <span class="number">4</span>bytes 		记录整个压缩列表占用的内存字节数：对压缩列表进行内存重分配或者计算zlend位置时使用。</span><br><span class="line">- zltail	 <span class="built_in">uint</span>32_t  	<span class="number">4</span>bytes		记录压缩列表表尾节点距离压缩列表的起始地址有多少字节：通过该偏移量确定表尾节点位置-O(<span class="number">1</span>)</span><br><span class="line">- zllen      <span class="built_in">uint</span>16_t   <span class="number">4</span>bytes      记录压缩列表包含的节点数量，当节点数大于<span class="built_in">uint</span>16_MAX时,真实节点数必须遍历得到。</span><br><span class="line">- entryX 	 列表节点	  不定		压缩列表包含的各个节点，节点的长度由节点保存的内容决定。</span><br><span class="line">- zlend 	 <span class="built_in">uint</span>8_t    <span class="number">1</span>bytes		特殊值<span class="number">0xFF</span>(<span class="number">255</span>),用于标记压缩列表的末端。</span><br></pre></td></tr></table></figure>
-
-
-
-<h4 id="压缩列表节点的构成"><a href="#压缩列表节点的构成" class="headerlink" title="压缩列表节点的构成"></a>压缩列表节点的构成</h4><p>每个压缩节点可以保存一个<strong>字节数组或者一个整数值</strong>。</p>
-<p>其中字节数组可以是一下三种长度之一</p>
-<ul>
-<li>长度小于等于63字节的字节数组 (2^6-1)</li>
-<li>长度小于等于16383字节的字节数组(2^14-1)</li>
-<li>长度小于等于2^32-1字节的字节数组</li>
-</ul>
-<p>整数值则可以是以下六种长度之一</p>
-<ul>
-<li>4位长，介于0-12的无符号整数</li>
-<li>1字节长的有符号整数</li>
-<li>3字节长的有符号整数</li>
-<li>int16_t 类型整数</li>
-<li>int32_t 类型整数</li>
-<li>int64_t 类型整数</li>
-</ul>
-<p>每个压缩列表节点都有<code>previous_entry_length、 encoding、 content</code>组成</p>
-<ul>
-<li><p><code>previous_entry_length</code>: 以字节为单位，<strong>记录了压缩列表中的前一个节点的长度</strong>。（可以是1字节也可以是5字节，取决于前一个节点的长度）</p>
-<p><strong>由于压缩列表是顺序型存储，当我们知道某个节点起始地址的指针，那么通过这个指针和<code>previous_entry_length</code>就可以往前回溯，最终达到头结点</strong></p>
-</li>
-<li><p><code>encoding</code>: 记录了节点的content属性所保存的类型以及长度</p>
-<ul>
-<li>值最高00,01,10这种编码表示节点content属性保存着的是字节数组</li>
-<li>值最高位以11开头的是整数编码</li>
-</ul>
-</li>
-<li><p><code>content</code>: 负责保存节点值。</p>
-</li>
-</ul>
-<h4 id="连锁更新"><a href="#连锁更新" class="headerlink" title="连锁更新"></a>连锁更新</h4><p>​    由于压缩列表是顺序存放的，如果在<strong>一些临界值特殊情况下产生的连续多次空间扩展操作称之为“连锁更新”</strong>。（在<code>previous_entry_length</code>的长度介于1字节和5字节之间的时候，添加节点或者删除节点，可能会造成连锁更新)</p>
-<p>​    因为连锁更新在最坏情况下需要对压缩列表执行N次空间重分配操作，而每次空间重分配的最坏复杂度为O(N),所以连锁更新的最坏复杂度为O(N^2).但是最坏的情况基本不会发生，因此我们放心使用API，我们只要清楚知道什么是连锁更新，连锁更新做了什么就行。</p>
-<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><p>《Redis设计与实现》</p>
-]]></content>
-      <categories>
-        <category>redis</category>
-      </categories>
-      <tags>
-        <tag>数据结构</tag>
-        <tag>redis</tag>
       </tags>
   </entry>
   <entry>
@@ -693,346 +823,277 @@
       </tags>
   </entry>
   <entry>
-    <title>I/O多路复用</title>
-    <url>/posts/7ce262fd/</url>
+    <title>Redis数据结构</title>
+    <url>/posts/85682d75/</url>
     <content><![CDATA[<blockquote>
-<p>在网络编程中熟知的一个方法。nignx和redis中都实现了该方法，属于网络编程中的基本概念</p>
+<p>redis除了有sds外，还使用了一些常见的数据结构如链表，字典，跳跃表，整数集合和压缩列表等作为其底层数据结构。在使用的同时，Redis也对这些数据结构进行了一些优化。</p>
 </blockquote>
-<span id="more"></span>
+<!--*more*-->
 
 
 
-<h3 id="基本介绍"><a href="#基本介绍" class="headerlink" title="基本介绍"></a>基本介绍</h3><p>​    I/O多路复用是指程序在单个线程内通过记录每个I/O流的状态，来同时管理多个I/O流。这样使得程序能够在单线程内同时监听多个文件描述符。</p>
-<p>   不过值得注意的是，I/O复用虽然能同时监听多个文件描述符，但是其本身是阻塞的。并且当多个文件描述符同时就绪时，如果不采取额外措施，程序就只能按顺序依次处理其中的每个文件描述符。</p>
-<p>​    虽然是能够在单个线程同时监听多个文件描述符，但是文件描述符就绪依旧是串行处理，明白这一点就不会将I/O多路复用和并发混淆，因为串行处理事件并不是并发。</p>
-<p>​    I/O多路复用有三种熟知的具体实现，分别是Select，Poll 和 Epoll，下面来依次介绍它们。</p>
-<h3 id="SELECT系统调用"><a href="#SELECT系统调用" class="headerlink" title="SELECT系统调用"></a>SELECT系统调用</h3><p>​    用途：在指定时间内，<strong>监听用户感兴趣的文件描述符上的可读，可写和异常事件</strong>。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/select.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">select</span><span class="params">( <span class="keyword">int</span> nfds, fd_set* readfds, fd_set* writefds, fd_set* exceptfds, struct timeval* timeout)</span></span>;</span><br></pre></td></tr></table></figure>
+<h3 id="链表"><a href="#链表" class="headerlink" title="链表"></a>链表</h3><p>链表提供了高效的节点重排能力，以及顺序性的节点访问方式，并且可以通过增删节点来灵活地调整链表的长度。 由于C语言没有内置这种数据结构，所以Redis构建了自己的链表实现。</p>
+<p>使用场景：<strong>当一个列表键包含了数量比较多的元素，又或者列表中的包含的元素都是比较长的字符串时</strong>，Redis就会使用链表作为列表键的底层实现。</p>
+<h4 id="链表和链表节点的实现"><a href="#链表和链表节点的实现" class="headerlink" title="链表和链表节点的实现"></a>链表和链表节点的实现</h4><p>链表我们都很熟悉，一般可以用一个struct来实现</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">/* 双端链表节点 */</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ListNode</span>&#123;</span></span><br><span class="line">    <span class="keyword">void</span>* value; <span class="comment">// node 节点值</span></span><br><span class="line">    ListNode* prev;	<span class="comment">// 前驱</span></span><br><span class="line">    ListNode* next; <span class="comment">// 后置</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
-<p>​    由上面的API可以看出，nfds是感兴趣的fd总数，后面三个参数分别是三种fd的集合，最后一个时间参数是指定时间，如果超过时间直接返回。</p>
-<pre><code> 而`fd_set`结构体仅仅包含一个整形数组，**该数组的每个元素的每一位标记一个fd。**fd_set能容纳的文件描述符最大数量优先，应该是2^16。
+<p>虽然只要使用多个<code>ListNode</code>就能够组成链表。但是这个双端链表给的信息不是很多，Redis一般使用这个Struct来表示节点</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;adlist.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">list</span>&#123;</span></span><br><span class="line">	<span class="comment">// 表头结点</span></span><br><span class="line">    ListNode* head;</span><br><span class="line">    <span class="comment">// 表尾结点</span></span><br><span class="line">    ListNode* tail;</span><br><span class="line">    <span class="comment">// 链表所包含的节点数量</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> len;</span><br><span class="line">    <span class="comment">// 节点复制函数</span></span><br><span class="line">    <span class="keyword">void</span> *(*dup)(<span class="keyword">void</span> *ptr);</span><br><span class="line">    <span class="comment">// 节点值释放函数</span></span><br><span class="line">    <span class="keyword">void</span> (*<span class="built_in">free</span>)(<span class="keyword">void</span> *ptr);</span><br><span class="line">    <span class="comment">// 节点值对比函数</span></span><br><span class="line">    <span class="keyword">int</span> (*match)(<span class="keyword">void</span> *ptr, <span class="keyword">void</span> *key);</span><br><span class="line">	</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>Redis的链表特性可以总结如下：</p>
+<ul>
+<li>双端：链表节点有<code>prev</code>和<code>next</code>指针，可以O(1)时间获取节点的前驱和后置节点。</li>
+<li>无环：不是环状链表</li>
+<li>带表头指针和表尾指针：有着head和tail节点</li>
+<li>带链表长度计数器：<code> len</code>属性对链表进行技术，程序获得链表种节点数量的复杂度为O(1)</li>
+<li>多态：<code>void* value</code> 节点值的类型多态。并且可以通过三个节点函数来设置类型。链表可以用于保存各种不同类型的值。</li>
+</ul>
+<h4 id="链表和链表节点的API"><a href="#链表和链表节点的API" class="headerlink" title="链表和链表节点的API"></a>链表和链表节点的API</h4><p>详情请见《Redis设计与实现》 P22</p>
+<h3 id="字典"><a href="#字典" class="headerlink" title="字典"></a>字典</h3><p>字典又称符号表，映射。是一种用于保存键值对的抽象数据结构。(key-value)</p>
+<p>在字典中，一个key和一个value进行关联。<strong>每个key是独一无二的</strong>，用户通过寻找键来得到与之关联的值。</p>
+<p>字典也是哈希键的底层实现之一。</p>
+<h4 id="字典的实现"><a href="#字典的实现" class="headerlink" title="字典的实现"></a>字典的实现</h4><p>Redis的字典使用哈希表作为底层实现，一个哈希表里面可以有多个哈希表节点，而每个哈希表节点就保存了字典中的一个键值对</p>
+<ul>
+<li><p>哈希表：</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;dict.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dictht</span>&#123;</span></span><br><span class="line">    <span class="comment">// 哈希表数组</span></span><br><span class="line">    <span class="comment">// table是一个数组， 数组中存放的元素是一个指向dicEntry结构的指针</span></span><br><span class="line">    <span class="comment">// dicEntry 结构保存着一个键值对</span></span><br><span class="line">    dictEntry **table;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 哈希表大小</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> size;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 哈希表大小掩码，用于计算索引值</span></span><br><span class="line">    <span class="comment">// 总是等于size-1</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> sizemask;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 该哈希表已有节点的数量</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> used;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+<li><p>哈希表节点</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dictEntry</span>&#123;</span></span><br><span class="line">  	<span class="comment">// 键</span></span><br><span class="line">    <span class="keyword">void</span>* key;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 值</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span>&#123;</span></span><br><span class="line">        <span class="keyword">void</span> *val;</span><br><span class="line">        <span class="keyword">uint64_t</span> u64;</span><br><span class="line">        <span class="keyword">int64_t</span> s64;</span><br><span class="line">    &#125;v;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 指向下一个哈希表节点，形成链表</span></span><br><span class="line">    <span class="comment">// 这个指针可以将多个 哈希值相同 的键值对链接在一起，一次来解决键冲突的问题</span></span><br><span class="line">    dicEntry *next;</span><br><span class="line">&#125;;  </span><br></pre></td></tr></table></figure></li>
+<li><p>字典</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dict</span>&#123;</span></span><br><span class="line">    <span class="comment">// 类型特定函数</span></span><br><span class="line">    dicType* type;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 私有数据</span></span><br><span class="line">    <span class="keyword">void</span> privdata;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 哈希表</span></span><br><span class="line">    <span class="comment">// 字典只使用ht[0], h[1]哈希表会在对ht[0]哈希表进行rehash时使用。</span></span><br><span class="line">    dictht ht[<span class="number">2</span>];</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// rehash 索引</span></span><br><span class="line">    <span class="comment">// 当rehash不在进行时，设置为-1</span></span><br><span class="line">    <span class="keyword">int</span> trehashidx;      <span class="comment">/* rehashing not in progress if rehashidx == -1 */</span></span><br><span class="line">   </span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>type属性是一个指向<code>dicType</code>的指针，每个<code>dicType</code>结构保存了一簇用于操作特定类型键值对的函数，Redis会为<strong>用途不同的字典设置不同的类型特定函数。</strong></li>
+<li>而<code>privdata</code>属性则保存了需要传给那些<strong>类型特定函数的可选参数</strong> 。</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">dictType</span>&#123;</span></span><br><span class="line">	<span class="comment">// 计算哈希值的函数</span></span><br><span class="line">    <span class="function"><span class="keyword">unsigned</span> <span class="title">int</span> <span class="params">(*hashFunction)</span> <span class="params">(<span class="keyword">const</span> <span class="keyword">void</span>* key)</span></span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 复制键的函数</span></span><br><span class="line">    <span class="keyword">void</span>* (*keyDup) (<span class="keyword">void</span> *privdata, <span class="keyword">const</span> <span class="keyword">void</span>* key);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 复制值的函数</span></span><br><span class="line">    <span class="keyword">void</span>* (*valDup)(<span class="keyword">void</span> *privdata, <span class="keyword">const</span> <span class="keyword">void</span>* obj);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 对比键的函数</span></span><br><span class="line">    <span class="keyword">int</span> (*keyCompare) (<span class="keyword">void</span> *privdata, <span class="keyword">const</span> <span class="keyword">void</span>* key1, <span class="keyword">const</span> <span class="keyword">void</span>* key2);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 销毁键的函数</span></span><br><span class="line">    <span class="keyword">void</span> (*keyDestructor) (<span class="keyword">void</span> *privdata, <span class="keyword">void</span> *key);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 销毁值得函数</span></span><br><span class="line">    <span class="keyword">void</span> (*valDestructor) (<span class="keyword">void</span> *privdata, <span class="keyword">void</span> *obj);</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h4 id="哈希算法"><a href="#哈希算法" class="headerlink" title="哈希算法"></a>哈希算法</h4><p>​    当需要将一个键值对添加到字典中，程序需要先根据键值对的KEY计算出哈希值和索引值，再根据索引值，将包含新键值对的哈希表节点放到哈希表数组的制定索引上面。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">hash = dict-&gt;type-&gt;hashFunction(key);</span><br><span class="line"><span class="comment">// ht[x] 可以是 ht[0] 或者 ht[1]</span></span><br><span class="line">index = hash &amp; dict-&gt;ht[x].sizemark;</span><br></pre></td></tr></table></figure>
+
+<pre><code> Redis使用MurmurHash2算法来计算键的哈希值，这个算法的更多信息可以参考该算法的主页：[MurmurHash2算法](http://code.google.com/p/smhasher)
 </code></pre>
-<p>​    这是select最大的缺点：</p>
+<h4 id="解决键冲突"><a href="#解决键冲突" class="headerlink" title="解决键冲突"></a>解决键冲突</h4><p>​    <strong>键冲突是指当有两个或以上数量的键被分配到了哈希数组的同一索引上面。</strong>Redis使用<strong>链地址法</strong>来解决键冲突。Redis出于速度考虑，程序总是将新节点添加到链表的表头位置（复杂度为O(1)）。</p>
+<h4 id="Rehash"><a href="#Rehash" class="headerlink" title="Rehash"></a>Rehash</h4><p>rehash实际上就是二次哈希</p>
 <ul>
-<li><p><strong>每次去查看文件描述符的状态都要按位去轮询整个数组，O（N），效率不高</strong></p>
+<li><p>rehash的目的：随着操作不断执行，哈希表保存的键值对会逐渐地增多或者减少，<strong>为了让哈希表的负载因子（load factor）维持在一个合理的范围之内</strong>，当<strong>哈希表保存的键值对数量太多或者太少</strong>时，程序需要对哈希表的大小进行相应的扩展或收缩，这个时候用到了rehash。</p>
 </li>
-<li><p><strong>而且存储的文件描述符有上限，只能存储几万个</strong>（这个很少，fd的上限能够达到上百万个）</p>
+<li><p>rehash的步骤：</p>
+<ul>
+<li>为字典ht[1]哈希表分配空间，这个哈希表的空间大小取决于要执行的操作，以及ht[0]当前包含的键值对数量（也即是ht[0].used属性的值）<ul>
+<li>如果执行<strong>扩展</strong>操作， *<em>ht[1]的大小为第一个大于等于ht[0].used <em>2 的 2^n</em></em>(2的n次方幂)</li>
+<li>如果执行<strong>收缩</strong>操作，<strong>ht[1]的大小为第一个大于等于ht[0].used 的 2^n</strong>（二者是除以2的关系）</li>
+</ul>
 </li>
-<li><p>非线程安全</p>
+<li>将保存在ht[0]中的所有键值对rehash到ht[1]上面：<strong>rehash指的是重新计算键的哈希值和索引值，然后将键值对房知道ht[1]的指定位置上。</strong></li>
+<li><strong>当ht[0]上全部键值对都转移到ht[1]上之后，释放ht[0],将ht[1]设置为ht[0], ht[1]设置为空白哈希表，为下一次rehash做好准备。</strong>（相当于ht[1]是一个后备缓存）</li>
+</ul>
+</li>
+<li><p>扩展收缩的条件</p>
+<ul>
+<li><p>扩展操作条件</p>
+<ul>
+<li>服务器目前<strong>没有</strong>执行<code>BGSAVE</code>或者<code>BGREWRITEAOF</code>命令，并且负载因子大于等于1</li>
+<li>服务器目前<strong>正在</strong>执行<code>BGSAVE</code>或者<code>BGREWRITEAOF</code>命令，并且负载因子大于等于5</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 上面两个命令相当于服务器正在创建服务器进程的子进程，由于写时复制的问题，在子程序存在期间，服务器会提高执行扩展操作使用的负载因子。从而避免在子进程存在期间进行扩展操作，以此节约内存。</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 负载因子 = 哈希表已保存节点数量 / 哈希表大小</span></span><br><span class="line">load_factor = ht[<span class="number">0</span>].used / ht[<span class="number">0</span>].size</span><br></pre></td></tr></table></figure></li>
+<li><p>收缩操作条件： 负载因子小于等于0.1</p>
 </li>
 </ul>
-<h3 id="POLL系统调用"><a href="#POLL系统调用" class="headerlink" title="POLL系统调用"></a>POLL系统调用</h3><p>​    poll和select类似，也是在<strong>指定时间轮询一定数量的文件描述符</strong>，以测试其中是否有就绪者。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;poll.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">pollfd</span>&#123;</span></span><br><span class="line">  	<span class="keyword">int</span> fd;				<span class="comment">// 文件描述符</span></span><br><span class="line">    <span class="keyword">short</span> events;		<span class="comment">// 注册的事件</span></span><br><span class="line">    <span class="keyword">short</span> revents;		<span class="comment">// 活跃的事件，由内核填充</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">poll</span><span class="params">(struct pollfd* fds, <span class="keyword">nfds_t</span> nfds, <span class="keyword">int</span> timeout)</span></span>;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<h4 id="渐进式rehash"><a href="#渐进式rehash" class="headerlink" title="渐进式rehash"></a>渐进式rehash</h4><p>​    <strong>rehash动作不是一次性完成的，而是分多次、渐进式的完成。</strong>（如何渐进式完成，通过索引计数器）</p>
+<ul>
+<li><p>渐进式rehash步骤</p>
+<ul>
+<li>为ht[1]分配空间，让字典同时持有两个hash表</li>
+<li>字典中维持的索引计数器变量<code>rehashidx</code>从-1变为0，表示rehash工作正式开始</li>
+<li>在rehash进行期间，每次对字典执行添加、删除、查找或者更新操作时，程序除了执行指定操作以外，还会<strong>顺带ht[0]哈希表在<code>rehashidx</code>索引上的所有键值对rehash到ht[1]</strong>,当rehash工作完成之后，程序将<code>rehashidx</code>属性自增1</li>
+<li>随着字典不断执行，ht[0]所有键值对都会被rehash至ht[1],这时程序将<code>rehashidx</code>属性设置为-1</li>
+</ul>
+<p>索引计数器从-1到0开始，完成之后置为-1。</p>
+</li>
+</ul>
+<h3 id="跳跃表"><a href="#跳跃表" class="headerlink" title="跳跃表"></a>跳跃表</h3><p>​    <strong>跳跃表是一种有序数据结构，通过在每个节点维持多个指向其他节点的指针，从而达到快速访问节点的目的。</strong></p>
+<p>​    跳跃表TC： 平均O(logN)，最坏 O(N)进行节点查找，可以通过顺序性操作来批量处理节点。（效率高，大部分和平衡树媲美，但是比平衡树简单）</p>
+<p>​    <strong>一般用于有序集合键的底层实现</strong>，或者用于集群节点中作为内部数据结构。</p>
+<p>(特点：通过每个节点维持指向其他节点的指针来维持有序行)</p>
+<h4 id="跳跃表的实现"><a href="#跳跃表的实现" class="headerlink" title="跳跃表的实现"></a>跳跃表的实现</h4><p>redis的跳跃表有以下两个结构定义，其中一个结构用于表示跳跃表的节点，另外一个结构表示跳跃表的相关信息。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;redis.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 跳跃表节点</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span> &#123;</span></span><br><span class="line">    <span class="comment">// 后退指针</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">backward</span>;</span></span><br><span class="line">    <span class="comment">// 分值</span></span><br><span class="line">    <span class="keyword">double</span> score;</span><br><span class="line">    <span class="comment">// 成员对象</span></span><br><span class="line">    robj *obj</span><br><span class="line">    </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistLevel</span>&#123;</span></span><br><span class="line">        <span class="comment">// 前进指针</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">forward</span>;</span></span><br><span class="line">        <span class="comment">// 跨度</span></span><br><span class="line">        <span class="keyword">unsigned</span> <span class="keyword">int</span> span;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 跳跃表节点相关信息</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">zskiplist</span>&#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">header</span>;</span>	<span class="comment">// 指向跳跃变的表头节点</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">zskiplistNode</span>* <span class="title">tail</span>;</span>	<span class="comment">// 指向跳跃表的表尾节点</span></span><br><span class="line">    <span class="keyword">int</span> level;				<span class="comment">// 记录跳跃表内，层数最大的那个节点层数（表头节点不计算在内）O(1)</span></span><br><span class="line">    <span class="keyword">int</span> length;				<span class="comment">// 记录跳跃表的长度，即包含节点的数量（表头节点不计入在内） O(1)</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
-<p>​    看到这个API其实和select也是有点差别的。</p>
 <ul>
-<li>存放文件描述符的数据结构从数组位变成了</li>
-<li>事件类型区分更为细致，select只有三种时间类型，而poll将其细化了。如可读事件分为了POLLIN,POLLRDNORM, POLLDRBAND, POLLPRI四种。</li>
-</ul>
-<p>不过nfds和timoeout参数都和select相似，这里不赘述。</p>
-<p>其缺点也和select类似，</p>
+<li><p>跳跃表节点：</p>
 <ul>
-<li>遍历所有fd，不活跃fd也会去检查它的状态，O(N)</li>
-<li>线程不安全</li>
-</ul>
-<p>不过因为不是通过数组位存储，因此无上限太低的缺点。</p>
-<h3 id="EPOLL系统调用"><a href="#EPOLL系统调用" class="headerlink" title="EPOLL系统调用"></a>EPOLL系统调用</h3><p>接下来就迎来主角了，epoll是Linux特有的I/O复用函数，其实现和前两者有较大差异。</p>
-<p>优点</p>
+<li><p>层： 跳跃表节点的level数组可以包含多个元素，每个元素都包含一个指向其他节点的指针，程序可以通过这些层来加快访问其他节点的速度，一般来说，<strong>层的数量越多，访问其他节点速度越快。</strong> 每次创建一个新跳跃表节点，程序根据幂次定律（越大的数出现概率越小）随机生成一个介于1和32之间的值作为level数组的大小，这个大小就是<strong>层的高度</strong></p>
+</li>
+<li><p>前进指针：每个层都有指向表尾方向的前进指针(level[i].forward)，用于从表头向表尾方向访问节点。（前进指针有多个）</p>
+</li>
+<li><p>跨度： 用于记录两个节点之间的距离：</p>
 <ul>
-<li>epoll使用一组函数实现多路复用，前两者都只有单个函数</li>
-<li>epoll将用户关心的文件描述符上的事件放在内核里的一个事件表中，无需O(N)，只需要O(1)地查看关心的事件</li>
-<li>检查文件描述符是否就绪的方法更好，epoll采用回调的机制，而前两者采用的轮询机制，随着fd增加，回调效率不怎么降低，而轮询会大大降低。</li>
-<li>线程安全</li>
+<li>两个节点之间跨度越大，相距越远。</li>
+<li>指向nullptr的跨度都为0，因为没有连向任何节点。</li>
 </ul>
-<p>略有瑕疵的缺点</p>
-<ul>
-<li>内核事件表需要额外一个文件描述符表示，浪费了一个文件描述符</li>
-<li>只能在Linux上用</li>
+</li>
+<li><p>后退指针：用于表尾向表头访问的节点，<strong>每个节点只有一个后退指针，只能退一个节点</strong>，后退指针最多退到头指针的后一个指针（头指针退不到）</p>
+</li>
+<li><p>分值：跳跃表中<strong>所有节点都是按照分值从小到大来排序</strong></p>
+</li>
+<li><p>成员：<strong>obj属性，指向一个字符串对象，而字符串对象则保存着一个SDS值。</strong></p>
+</li>
 </ul>
-<h4 id="epoll事件表"><a href="#epoll事件表" class="headerlink" title="epoll事件表"></a>epoll事件表</h4><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/epoll.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">epoll_create</span><span class="params">(<span class="keyword">int</span> size)</span></span>;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>另外可以保存相同分值的节点，分值相同的节点将按照成员对象在字典序中的大小进行排序，成员对象较小的节点会排在前面（靠近表头的方向），而成员对象较小的节点则会排在后面，<strong>成员对象一定是唯一的</strong></p>
+<h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><ul>
+<li>跳跃表是有序集合的底层实现之一</li>
+<li>Redis跳跃表由<code>zskiplist</code> 和<code>zskiplistNode</code> 两个结构组成，这两个结构一定要记得。</li>
+<li>每个跳跃表节点的层数是1-32之间的随机数。</li>
+<li>在同一个跳跃表中，多个节点可以包含相同的分值，但每个节点的成员对象必须是唯一的。</li>
+<li>节点按照分值大小排序，分值相同，则按照成员对象大小进行排序。</li>
+</ul>
+<h3 id="整数集合"><a href="#整数集合" class="headerlink" title="整数集合"></a>整数集合</h3><p>​    整数集合<code>intset</code>是集合键的底层实现之一，当一个集合<strong>只包含整数值元素，并且这个集合的元素数量不多</strong>时，Redis会将其作为集合键的底层实现。</p>
+<h4 id="整数集合的实现"><a href="#整数集合的实现" class="headerlink" title="整数集合的实现"></a>整数集合的实现</h4><p>​    整数集合可以保存类型为<code>int16_t, int32_t或者 int64_t</code>的整数值，并且<strong>保证集合中不会出现重复元素</strong>（毕竟是set）。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;intset.h&gt;</span></span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">intset</span>&#123;</span></span><br><span class="line">    <span class="comment">// 编码方式</span></span><br><span class="line">    <span class="keyword">uint32_t</span> encoding;</span><br><span class="line">    <span class="comment">// 集合包含的元素数量</span></span><br><span class="line">    <span class="keyword">uint_t</span> length;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 保存元素的数组</span></span><br><span class="line">    <span class="keyword">int8_t</span> contents[];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
-<p><strong>该API创建一个内核事件表，返回与该事件表绑定的文件描述符。</strong>size无多大含义，只是通知内核告诉它事件表多大。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/epoll.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">epoll_event</span>&#123;</span></span><br><span class="line">  	<span class="keyword">uint32_t</span> events; 	<span class="comment">// epoll 事件</span></span><br><span class="line">    <span class="keyword">epoll_data_t</span> data;	<span class="comment">// 用户数据</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">union</span> <span class="title">epoll_data</span>&#123;</span></span><br><span class="line">    <span class="keyword">void</span>* ptr;</span><br><span class="line">    <span class="keyword">int</span> fd;</span><br><span class="line">    <span class="keyword">uint32_t</span> u32;</span><br><span class="line">    <span class="keyword">uint64_t</span> u64;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">epoll_ctl</span><span class="params">(<span class="keyword">int</span> epfd, <span class="keyword">int</span> op, <span class="keyword">int</span> fd, struct epoll_event *event)</span></span>;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>contents 数组是整数集合的底层实现：整数集合的每个元素都是contents数组的一个数组项(items),各个项在数组中<strong>按值的大小从小到大有序地排列，并且数组中不包含任何重复项。</strong></li>
+<li>length属性记录了整数集合包含的元素数量。</li>
+</ul>
+<p>虽然contents数组类型是<code>int8_t</code>， 但是这数组并不保存任何<code>int8_t</code>类型的值，<strong>contents数组的真正类型取决于encoding属性的值。</strong></p>
+<ul>
+<li>encoding属性<ul>
+<li>如果encoding属性的值为<code>INTSET_ENC_INT16</code>,那么contents就是一个<code>int16_t</code>类型数组大小。</li>
+<li>同样的，如果为<code>INTSET_ENC_INT32</code>，则<code>int32_t</code>； 如果为<code>INTSET_ENC_INT64</code>，则<code>int64_t</code></li>
+</ul>
+</li>
+</ul>
+<h4 id="升级"><a href="#升级" class="headerlink" title="升级"></a>升级</h4><p>​    当我们要<strong>将一个新元素添加到整数集合里面，并且新元素的类型比整数集合现有所有元素的类型都要长时</strong>，整数集合需要先进行<strong>升级</strong>，才能将新元素添加到整数集合里去。</p>
+<p>​    升级并添加新元素共分为三步：</p>
+<ul>
+<li><p>根据新元素类型，扩展整数集合底层数组的空间大小，并为新元素分配空间（扩容）</p>
+</li>
+<li><p>将原有的元素转换成新元素的类型，并将类型转换后的元素放在正确的位上，在放置元素的过程中，<strong>底层数组有序性质不改变</strong>。（转类型）</p>
+</li>
+<li><p>将新元素加入底层数组。（添加新元素）</p>
+</li>
+</ul>
+<p>由于引发升级的新元素的长度总是比整数集合现有所有元素的长度都打，所以这个新元素的值要么就大于所有现有元素，要么就小于所有现有元素。</p>
+<ul>
+<li>大于现有元素，插入到最后面</li>
+<li>小于现有元素，插入到最前面</li>
+</ul>
+<p>升级的好处：</p>
+<ul>
+<li>提升整数集合的灵活性</li>
+<li>节约内存</li>
+</ul>
+<h4 id="降级"><a href="#降级" class="headerlink" title="降级"></a>降级</h4><p>​    <strong>整数集合不支持降级操作，一旦升级了，就算数组中的高位数被删除了，维持的依旧是高位。</strong></p>
+<h3 id="压缩列表"><a href="#压缩列表" class="headerlink" title="压缩列表"></a>压缩列表</h3><p>​    压缩列表是<strong>列表键和哈希键</strong>的底层实现之一。<strong>当列表键只包含少量列表项，并且每个列表项要么就是小整数值，要么就是长度比较短的字符串，那么Redis就会使用压缩列表作为底层实现</strong>。</p>
+<h4 id="压缩列表的构成"><a href="#压缩列表的构成" class="headerlink" title="压缩列表的构成"></a>压缩列表的构成</h4><p>​    压缩列表是为了节约内存而开发的，是由<strong>一系列特殊编码的连续内存块组成的顺序型数据结构。</strong>一个压缩列表可以包含任意多个节点，<strong>每个节点保存一个字节数组或者一个整数值</strong>。</p>
+<figure class="highlight angelscript"><table><tr><td class="code"><pre><span class="line">|  属性     |   类型   |   长度   |          用途</span><br><span class="line">- zlbytes	 <span class="built_in">uint</span>32_t   <span class="number">4</span>bytes 		记录整个压缩列表占用的内存字节数：对压缩列表进行内存重分配或者计算zlend位置时使用。</span><br><span class="line">- zltail	 <span class="built_in">uint</span>32_t  	<span class="number">4</span>bytes		记录压缩列表表尾节点距离压缩列表的起始地址有多少字节：通过该偏移量确定表尾节点位置-O(<span class="number">1</span>)</span><br><span class="line">- zllen      <span class="built_in">uint</span>16_t   <span class="number">4</span>bytes      记录压缩列表包含的节点数量，当节点数大于<span class="built_in">uint</span>16_MAX时,真实节点数必须遍历得到。</span><br><span class="line">- entryX 	 列表节点	  不定		压缩列表包含的各个节点，节点的长度由节点保存的内容决定。</span><br><span class="line">- zlend 	 <span class="built_in">uint</span>8_t    <span class="number">1</span>bytes		特殊值<span class="number">0xFF</span>(<span class="number">255</span>),用于标记压缩列表的末端。</span><br></pre></td></tr></table></figure>
 
-<p><strong>该API用来操作已创建的内核事件表。</strong></p>
-<p>参数分析：</p>
-<ul>
-<li><p>epfd是负责内核事件表的文件描述符</p>
-</li>
-<li><p>fd是要操作的文件描述符，op是操作类型：</p>
-<ul>
-<li>EPOLL_CTL_ADD：往事件表注册fd上的事件</li>
-<li>EPOLL_CTL_MOD：修改fd上的注册事件</li>
-<li>EPOLL_CTL_DEL：删除fd上的注册事件</li>
-</ul>
-</li>
-<li><p>event参数指定事件。事件类型存储在event-&gt;events中。epoll的事件类型和poll类似，只不过在前面加了个E，不过epoll有两种额外的事件——EPOLLET和EPOLLONESHOT。这个后面再讲。</p>
-</li>
-<li><p>返回值：成功回0，失败回-1并设置errno。</p>
-</li>
-</ul>
-<h4 id="epoll-wait"><a href="#epoll-wait" class="headerlink" title="epoll_wait"></a>epoll_wait</h4><p>​    epoll的主要接口是epoll_wait函数。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/epoll.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">epoll_wait</span><span class="params">(<span class="keyword">int</span> epfd, struct epoll_event* events, <span class="keyword">int</span> maxevents, <span class="keyword">int</span> timeout)</span></span>;</span><br></pre></td></tr></table></figure>
 
-<p><strong>该API在一段超时时间内等待一组文件描述符上的事件。</strong></p>
-<p>参数：</p>
+
+<h4 id="压缩列表节点的构成"><a href="#压缩列表节点的构成" class="headerlink" title="压缩列表节点的构成"></a>压缩列表节点的构成</h4><p>每个压缩节点可以保存一个<strong>字节数组或者一个整数值</strong>。</p>
+<p>其中字节数组可以是一下三种长度之一</p>
 <ul>
-<li>maxevents 指定最多能够监听多少个事件，必须大于0</li>
+<li>长度小于等于63字节的字节数组 (2^6-1)</li>
+<li>长度小于等于16383字节的字节数组(2^14-1)</li>
+<li>长度小于等于2^32-1字节的字节数组</li>
 </ul>
-<p><strong>如果检测到事件</strong>，就将所有就绪的事件从内核事件表（由epfd指定）中复制到它的第二个参数events指向的数组中。<strong>这个数组只用于输出epoll_wait检测到的就绪事件，而不像前两者的数组参数那样即用于传入用户注册的事件，又用于输出检测的内核事件。这样极大提高了应用程序索引就绪文件描述符的效率。</strong>（目前还是LT模式的效率提升，因为是检测到事件就返回）</p>
-<h4 id="ET和LT模式"><a href="#ET和LT模式" class="headerlink" title="ET和LT模式"></a>ET和LT模式</h4><p>​    epoll对fd的操作用两种模式:ET和LT。其中LT是默认工作模式，这个模式下就是效率提升版的poll。当往epoll内核事件表中注册一个文件描述符上的EPOLLET时间事，epoll工作模式变成了ET，ET是epoll的高效模式。</p>
-<p>​    采用LT模式时，如果检测到有事件发生时，epoll_wait将此事通知给应用程序，应用程序可以不处理它，但是下次调用epoll_wait依旧会通知应用程序来处理它。</p>
-<p>​    而ET模式不同，ET模式当通知了应用程序，应用程序必须立即处理该事件，因为后续的epoll_wait调用不再向应用程序通知这一事件。这样一来极大降低了同一事件被重复触发的次数（但是可能通知了没处理直接被漏掉了吗？思考一下）</p>
-<p>​    形象的说就是<strong>LT模式是传统的调用epoll_wait有活跃事件就触发（可读事件缓冲区不为空，可写事件缓冲区不满），而ET是增量触发，只有新事件到来才会通知应用程序。</strong></p>
-<p>​    （ET必须是非阻塞的！）</p>
-<h4 id="EPOLLSHOT事件"><a href="#EPOLLSHOT事件" class="headerlink" title="EPOLLSHOT事件"></a>EPOLLSHOT事件</h4><p>​    即使我们使用ET模式，<strong>一个socket上的某个事件还是可能被触发多次</strong>。这在并发程序中会引起一个问题。比如一个线程在读取完某个socket上的数据后开始处理这些数据，在处理数据过程中又有新数据可读，这样新的线程唤醒去读新数据，那么就出现了<strong>两个线程同时操作一个socket的局面</strong>。但是我们期望的是<strong>一个socket连接在任一时刻都只被一个线程处理。（因为这会导致线程同步问题）</strong></p>
-<p>​    这里就可以采用EPOLLSHOT事件，对于注册该事件的fd，<strong>操作系统最多出发其上注册的一个可读、可写或者一长时间，且只触发一次。</strong>这样当一个线程处理这socket，其他线程不能处理该socket。</p>
-<p>​    但是反过来思考一下，只触发一次，那下次怎么办？因此触发这一次之后要重置EPOLLSHOT事件，进而让其他工作线程之后有机会处理该socket</p>
-<h3 id="三种系统调用的对比"><a href="#三种系统调用的对比" class="headerlink" title="三种系统调用的对比"></a>三种系统调用的对比</h3><p>​    这三组系统调用都通过某种结构体变量来告诉内核监听那些文件描述符上的哪些事件，并使用该结构体类型的参数来获取内核处理的结果。</p>
-<table>
-<thead>
-<tr>
-<th align="center">类别</th>
-<th align="center">SELECT</th>
-<th align="center">POLL</th>
-<th align="center">EPOLL</th>
-</tr>
-</thead>
-<tbody><tr>
-<td align="center">使用数据结构</td>
-<td align="center">三个数组构成的位图</td>
-<td align="center">统一数据结构<code>epollfd</code></td>
-<td align="center">同一数据结构，内核注册表</td>
-</tr>
-<tr>
-<td align="center">事件类型</td>
-<td align="center">最基本的三种：可读、可写、异常</td>
-<td align="center">带有优先级的事件类型，区分更细致</td>
-<td align="center">和poll类似，多了ET和SHOT</td>
-</tr>
-<tr>
-<td align="center">事件监听机制</td>
-<td align="center">轮询</td>
-<td align="center">轮询</td>
-<td align="center">回调</td>
-</tr>
-<tr>
-<td align="center">时间复杂度</td>
-<td align="center">O(N)</td>
-<td align="center">O(N)</td>
-<td align="center">O(1)</td>
-</tr>
-<tr>
-<td align="center">优点</td>
-<td align="center">多平台可用，简单</td>
-<td align="center">多平台可用，简单，上限比select高</td>
-<td align="center">高效，LT模式下就是O(1)，ET模式下更是减少同一事件的多次触发，线程安全</td>
-</tr>
-<tr>
-<td align="center">缺点</td>
-<td align="center">低效，处理的fd有上限，非线程安全</td>
-<td align="center">低效，非线程安全</td>
-<td align="center">仅LINUX可用</td>
-</tr>
-</tbody></table>
-<p><strong>PS：虽然epoll的性能最好，但是在连接数少并且连接都十分活跃的情况下，select和poll的性能可能比epoll好，毕竟epoll的通知机制需要很多函数回调。</strong></p>
+<p>整数值则可以是以下六种长度之一</p>
+<ul>
+<li>4位长，介于0-12的无符号整数</li>
+<li>1字节长的有符号整数</li>
+<li>3字节长的有符号整数</li>
+<li>int16_t 类型整数</li>
+<li>int32_t 类型整数</li>
+<li>int64_t 类型整数</li>
+</ul>
+<p>每个压缩列表节点都有<code>previous_entry_length、 encoding、 content</code>组成</p>
+<ul>
+<li><p><code>previous_entry_length</code>: 以字节为单位，<strong>记录了压缩列表中的前一个节点的长度</strong>。（可以是1字节也可以是5字节，取决于前一个节点的长度）</p>
+<p><strong>由于压缩列表是顺序型存储，当我们知道某个节点起始地址的指针，那么通过这个指针和<code>previous_entry_length</code>就可以往前回溯，最终达到头结点</strong></p>
+</li>
+<li><p><code>encoding</code>: 记录了节点的content属性所保存的类型以及长度</p>
+<ul>
+<li>值最高00,01,10这种编码表示节点content属性保存着的是字节数组</li>
+<li>值最高位以11开头的是整数编码</li>
+</ul>
+</li>
+<li><p><code>content</code>: 负责保存节点值。</p>
+</li>
+</ul>
+<h4 id="连锁更新"><a href="#连锁更新" class="headerlink" title="连锁更新"></a>连锁更新</h4><p>​    由于压缩列表是顺序存放的，如果在<strong>一些临界值特殊情况下产生的连续多次空间扩展操作称之为“连锁更新”</strong>。（在<code>previous_entry_length</code>的长度介于1字节和5字节之间的时候，添加节点或者删除节点，可能会造成连锁更新)</p>
+<p>​    因为连锁更新在最坏情况下需要对压缩列表执行N次空间重分配操作，而每次空间重分配的最坏复杂度为O(N),所以连锁更新的最坏复杂度为O(N^2).但是最坏的情况基本不会发生，因此我们放心使用API，我们只要清楚知道什么是连锁更新，连锁更新做了什么就行。</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><p>《Redis设计与实现》</p>
 ]]></content>
       <categories>
-        <category>网络编程</category>
+        <category>redis</category>
       </categories>
       <tags>
-        <tag>I/O多路复用</tag>
+        <tag>数据结构</tag>
+        <tag>redis</tag>
       </tags>
   </entry>
   <entry>
-    <title>排序算法</title>
-    <url>/posts/735e5788/</url>
+    <title>LFU</title>
+    <url>/posts/3be3e04e/</url>
     <content><![CDATA[<blockquote>
-<p> 各类排序算法是一个很基础的算法概念，在面试当中，手撕排序算法也只算得上一道简单题。</p>
+<p>LFU全程Least Frequently Used, 每次淘汰那些使用次数最少的数据。LFU相较于LRU，实现较难，考虑因素也更多。不过这些经典算法套路都是固定的，关键在于逻辑较复杂，不太容易一次就能写出漂亮且没有bug的代码。</p>
 </blockquote>
 <span id="more"></span>
 
-<p>排序算法一般可分为 快速排序， 归并排序，插入排序，冒泡排序，选择排序和堆排序。（其中快排，归并和堆排序比较难，但是要掌握）</p>
-<h3 id="C-中的std-sort"><a href="#C-中的std-sort" class="headerlink" title="C++中的std::sort"></a>C++中的<code>std::sort</code></h3><p>​    sort算法主体是一个快速排序，快速排序的时间复杂度为<code>O(NlogN)</code>，但是其对效率有了优化。</p>
-<p>首先，快速排序在小区间的效率不如插入排序，因此在小空间的话，就用<strong>插入排序</strong>。 而且快速排序是基于递归的，因此如果数据过大，递归层数过大，这就要转入<strong>堆排序</strong> 。</p>
-<p>然后，快速排序的效率取决于pivot的取法，如果pivot取得适中，那么效率最高。因此标准库里面用的是<strong>九取一，</strong>这可以尽可能使得pivot的取值更合理。</p>
-<h3 id="经典排序模板"><a href="#经典排序模板" class="headerlink" title="经典排序模板"></a>经典排序模板</h3><h4 id="1-快速排序"><a href="#1-快速排序" class="headerlink" title="1.     快速排序"></a>1.     快速排序</h4><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">quicksort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (l + <span class="number">1</span> &gt;= r)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// key is the pivot element </span></span><br><span class="line">	<span class="keyword">auto</span> first = l, last = r - <span class="number">1</span>, key = nums[first];</span><br><span class="line">	<span class="keyword">while</span>(first &lt; last) &#123;</span><br><span class="line">		<span class="comment">// deal with the element from the last</span></span><br><span class="line">		<span class="keyword">while</span> (first &lt; last &amp;&amp; nums[last] &gt;= key) &#123;</span><br><span class="line">			--last;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// swap and pivot become to the nums[last]</span></span><br><span class="line">		nums[first] = nums[last];</span><br><span class="line"></span><br><span class="line">		<span class="comment">// deal wiht the element from the first</span></span><br><span class="line"></span><br><span class="line">		<span class="keyword">while</span>(first &lt; last &amp;&amp; nums[first] &lt;= key) &#123;</span><br><span class="line">			++first;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// swap </span></span><br><span class="line">		nums[last] = nums[first];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// put the pivot on the correct position, sun first is the division line</span></span><br><span class="line">	nums[first] = key;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// recursion</span></span><br><span class="line">	<span class="built_in">quicksort</span>(nums, l, first);</span><br><span class="line">	<span class="built_in">quicksort</span>(nums, first + <span class="number">1</span>, r);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id><a href="#" class="headerlink" title></a></h4><h3 id="算法描述"><a href="#算法描述" class="headerlink" title="算法描述"></a>算法描述</h3><p>首先写出一个类，接受<code>capacity</code>参数，实现<code>get()</code>和<code>put()</code>方法</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LFUCache</span>&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">LFUCache</span>(<span class="keyword">int</span> capacity):<span class="built_in">cap_</span>(capacity) &#123;&#125;</span><br><span class="line">    <span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span></span>;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span></span>;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="keyword">int</span> cap_;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
-<p>​    </p>
-<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 基于partition的排序</span></span><br><span class="line"><span class="comment">// algorithms 4th 所实现的</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">partition</span><span class="params">(std::vector&lt;<span class="keyword">int</span>&gt;&amp; nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">int</span> first = l, last = r+<span class="number">1</span>, key = nums[first];</span><br><span class="line"></span><br><span class="line">	<span class="keyword">while</span> (<span class="literal">true</span>) &#123;</span><br><span class="line">		<span class="keyword">while</span> (nums[++first] &lt; key) &#123;</span><br><span class="line">			<span class="keyword">if</span> (first == r)</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">while</span> (nums[--last] &gt; key) &#123;</span><br><span class="line">			<span class="keyword">if</span> (last == l)</span><br><span class="line">				<span class="keyword">break</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> (first &gt;= last)</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">		std::<span class="built_in">swap</span>(nums[first], nums[last]);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	std::<span class="built_in">swap</span>(nums[l], nums[last]);</span><br><span class="line">	<span class="keyword">return</span> last;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">quicksort</span><span class="params">(std::vector&lt;<span class="keyword">int</span>&gt;&amp; nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">if</span> (r &lt;= l)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line">	<span class="keyword">int</span> last = <span class="built_in">partition</span>(nums, l, r);</span><br><span class="line">	<span class="built_in">quicksort</span>(nums, l, last - <span class="number">1</span>);</span><br><span class="line">	<span class="built_in">quicksort</span>(nums, last + <span class="number">1</span>, r);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-
-
-<h4 id="2-归并排序"><a href="#2-归并排序" class="headerlink" title="2.     归并排序"></a>2.     归并排序</h4><p>方法：采用一个临时空间，将划分成两部分空间在这个临时空间中排好序，然后再放入原空间数组中。</p>
-<p>步骤： 先divide，然后recursion， 再deal with。</p>
-<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">mergesort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> l, <span class="keyword">int</span> r, vector&lt;<span class="keyword">int</span>&gt; &amp;temp)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">if</span>(l + <span class="number">1</span> &gt;= r)</span><br><span class="line">		<span class="keyword">return</span>;</span><br><span class="line">	<span class="comment">// divide, recursion first</span></span><br><span class="line">	<span class="keyword">int</span> m = l + (r - l) / <span class="number">2</span>;</span><br><span class="line">	<span class="built_in">mergesort</span>(nums, l, m, temp);</span><br><span class="line">	<span class="built_in">mergesort</span>(nums, m, r, temp);</span><br><span class="line"></span><br><span class="line">	<span class="comment">// conquer</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">int</span> p = l, q = m, i = l;</span><br><span class="line">	<span class="keyword">while</span>(p &lt; m || q &lt; r) &#123;</span><br><span class="line">		<span class="keyword">if</span> (q &gt;= r || (p &lt; m &amp;&amp; nums[p] &lt;= nums[q]))</span><br><span class="line">			temp[i++] = nums[p++];</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			temp[i++] = nums[q++];</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> (i = l; i &lt; r; ++i) &#123;</span><br><span class="line">		nums[i] = temp[i];</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-
-
-<h4 id="3-插入排序"><a href="#3-插入排序" class="headerlink" title="3.     插入排序"></a>3.     插入排序</h4><p>这个没什么讲的，反正记得<strong>插入排序是基于<code>swap</code>的</strong>就行</p>
-<figure class="highlight mipsasm"><table><tr><td class="code"><pre><span class="line">void <span class="keyword">insertsort(vector&lt;int&gt; </span>&amp;nums, int n) &#123;</span><br><span class="line">	for(int i=<span class="number">0</span><span class="comment">; i&lt;n; ++i) &#123;</span></span><br><span class="line">		for(int <span class="keyword">j=i; </span><span class="keyword">j&gt;0&amp;&amp; </span>nums[<span class="keyword">j] </span>&lt; nums[<span class="keyword">j-1]; </span>--<span class="keyword">j) </span>&#123;</span><br><span class="line">			<span class="keyword">swap(nums[j], </span>nums[<span class="keyword">j </span>- <span class="number">1</span>]);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-
-
-
-
-<h4 id="4-冒泡排序"><a href="#4-冒泡排序" class="headerlink" title="4.    冒泡排序"></a>4.    冒泡排序</h4><p><strong>冒泡排序同样也是基于swap的</strong>，而且为了节省时间，swap途中会有一个bool变量，来判断后续循环是否已经有序</p>
-<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">bubblesort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> n)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">bool</span> swapped;</span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = <span class="number">1</span>; i&lt;n; ++i) &#123;</span><br><span class="line">		swapped = <span class="literal">false</span>;</span><br><span class="line">		<span class="keyword">for</span>(<span class="keyword">int</span> j=i; j &lt; n-i+<span class="number">1</span>; ++j) &#123;</span><br><span class="line">			<span class="keyword">if</span>(nums[j] &lt; nums[j<span class="number">-1</span>]) &#123;</span><br><span class="line">				<span class="built_in">swap</span>(nums[j], nums[j - <span class="number">1</span>]);</span><br><span class="line">				swapped = <span class="literal">true</span>;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span>(!swapped)</span><br><span class="line">			<span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
-
-
-
-<h4 id="5-选择排序"><a href="#5-选择排序" class="headerlink" title="5.     选择排序"></a>5.     选择排序</h4><figure class="highlight excel"><table><tr><td class="code"><pre><span class="line">void selection_sort(vector&lt;<span class="built_in">int</span>&gt;&amp; nums, <span class="built_in">int</span> <span class="built_in">n</span>) &#123;</span><br><span class="line">	<span class="built_in">int</span> <span class="built_in">mid</span>;</span><br><span class="line">	for (<span class="built_in">int</span> i = <span class="number">0</span>; i &lt; <span class="built_in">n</span> - <span class="number">1</span>; ++i) &#123;</span><br><span class="line">		<span class="built_in">mid</span> = i;</span><br><span class="line">		for (<span class="built_in">int</span> j = i + <span class="number">1</span>; j &lt; <span class="built_in">n</span>; ++j) &#123;</span><br><span class="line">			<span class="built_in">if</span> (nums[j] &lt; nums[<span class="built_in">mid</span>]) &#123;</span><br><span class="line">				<span class="built_in">mid</span> = j;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		swap(nums[<span class="built_in">mid</span>], nums[i]);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
+<p>这个接口和LRU一致，get方法会去缓存中查询键key，如果key存在，则返回key对应的val,否则返回-1；put方法则插入或修改缓存。如果key已存在，则将它对应的值改为val，如果不存在，则插入键值对(key, val)。</p>
+<h3 id="思路分析"><a href="#思路分析" class="headerlink" title="思路分析"></a>思路分析</h3><p>LFU的一些逻辑要求</p>
+<ul>
+<li><p>LFU加入了一个<code>freq</code>频率参数，缓存中的数据是靠freq进行排序的。</p>
+</li>
+<li><p>如果是调用get和put，该key的freq就要加1。</p>
+</li>
+<li><p>如果容量满了进行插入，则需要将freq最小的key删除，如果最小的freq对应多个key，则删除其中最旧的那个。</p>
+</li>
+</ul>
+<p>要想在O(1)时间内解决这些问题，需要逐个击破：</p>
+<ul>
+<li><p>关于最基本的get和put，那么需要和LRU一样拥有一个<code>HashMap</code>存储<code>key</code>到<code>value</code>的映射，这样就可以快速操作<code>get(key)</code></p>
+</li>
+<li><p>加入freq，而且缓存中数据靠freq排序，这就说明一定要有个 <strong><code>freq</code>到<code>key</code>的映射</strong></p>
+</li>
+<li><p>要想在容量满的时候快速删除freq最小的key，这需要使用一个变量来指明最小freq，使用变量<code>minFreq</code></p>
+</li>
+<li><p>如果最小的freq对应多个key，而且要删除最旧的，我们可以用<strong>双向链表</strong>结构来存放一个freq对应的多个key</p>
+</li>
+<li><p>如果最小的freq只对应一个key，删除完之后需要minFreq++</p>
+</li>
+</ul>
+<p>总结一下：我们可以用Node节点来存储{key, value, freq},这样 LFU所用到的数据结构有一个以key为索引的哈希映射和一个以freq为索引的哈希链表。</p>
+<h3 id="代码逻辑"><a href="#代码逻辑" class="headerlink" title="代码逻辑"></a>代码逻辑</h3><p>这样接口如下所示</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Node</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span> key;</span><br><span class="line">	<span class="keyword">int</span> value;</span><br><span class="line">	<span class="keyword">int</span> freq;</span><br><span class="line">	<span class="built_in">Node</span>(<span class="keyword">int</span> key, <span class="keyword">int</span> value, <span class="keyword">int</span> freq) : <span class="built_in">key</span>(key), <span class="built_in">value</span>(value), <span class="built_in">freq</span>(freq) &#123;&#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LFUCache</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">LFUCache</span>(<span class="keyword">int</span> capacity) : <span class="built_in">cap_</span>(capacity), <span class="built_in">minFreq_</span>(<span class="number">0</span>) &#123;</span><br><span class="line">		keyToNode.<span class="built_in">clear</span>();</span><br><span class="line">		freqToNode.<span class="built_in">clear</span>();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span> </span>&#123;</span><br><span class="line">		<span class="keyword">if</span> (cap_ == <span class="number">0</span>) <span class="keyword">return</span>  <span class="number">-1</span>;</span><br><span class="line">		<span class="built_in">increaseFreq</span>(key);</span><br><span class="line">		<span class="keyword">return</span> keyToNode[key]-&gt;value;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span> </span>&#123;</span><br><span class="line">		<span class="keyword">if</span>(keyToNode.<span class="built_in">count</span>(key)) &#123;</span><br><span class="line">			keyToNode[key]-&gt;value = value;</span><br><span class="line">			<span class="built_in">increaseFreq</span>(key);</span><br><span class="line">		&#125;<span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="keyword">if</span>(keyToNode.<span class="built_in">size</span>() == cap_) &#123;</span><br><span class="line">				<span class="comment">// 容量已经满了,删除频率最小时序最差的node</span></span><br><span class="line">				<span class="built_in">deleteMinFreq</span>();</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="comment">// 插入新值</span></span><br><span class="line">			freqToNode[<span class="number">1</span>].<span class="built_in">push_front</span>(<span class="built_in">Node</span>(key, value, <span class="number">1</span>));</span><br><span class="line">			keyToNode[key] = freqToNode[<span class="number">1</span>].<span class="built_in">begin</span>();</span><br><span class="line">            minFreq_ = <span class="number">1</span>;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">increaseFreq</span><span class="params">(<span class="keyword">int</span> key)</span></span>;</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">deleteMinFreq</span><span class="params">()</span></span>;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">int</span> cap_;</span><br><span class="line">	<span class="keyword">int</span> minFreq_;</span><br><span class="line">	<span class="comment">// 由于key和node是一对一的关系，因此是 unordered_map&lt;int, list&lt;Node&gt;::iterator&gt;</span></span><br><span class="line">	unordered_map&lt;<span class="keyword">int</span>, list&lt;Node&gt;::iterator&gt; keyToNode;</span><br><span class="line">	<span class="comment">// 由于freq和node是一对多的关系，因此是 unordered_map&lt;int, list&lt;Node&gt;&gt;</span></span><br><span class="line">	unordered_map&lt;<span class="keyword">int</span>, list&lt;Node&gt;&gt; freqToNode;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
 
 
-
-<h4 id="6-堆排序"><a href="#6-堆排序" class="headerlink" title="6.     堆排序"></a>6.     堆排序</h4><p>基本思路：大根堆为例</p>
-<p>​    1：建立大根堆—- 将n个元素组成的无序序列构建一个大根堆</p>
-<p>​    2：交换堆元素—- 交换堆尾和堆首元素，使堆尾元素成为最大元素</p>
-<p>​    3：重建大根堆—- 将前n-1个元素组成的无序序列调整为大根堆（递归）</p>
-<p>重复执行2和3 直到整个序列都有序</p>
-<p>C++内部实现： 优先队列</p>
-<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapadjust</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> len, <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">auto</span> left = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line">	<span class="keyword">auto</span> right = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">auto</span> maxIdx = index;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (left &lt; len &amp;&amp; nums[left] &gt; nums[maxIdx]) maxIdx = left;</span><br><span class="line">	<span class="keyword">if</span> (right&lt; len &amp;&amp; nums[right] &gt; nums[maxIdx]) maxIdx = right;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span>(maxIdx != index) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[maxIdx], nums[index]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, len, maxIdx);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapsort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> size)</span> </span>&#123;</span><br><span class="line">	<span class="comment">// build a heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = size / <span class="number">2</span> <span class="number">-1</span>; i &gt;= <span class="number">0</span>; --i) &#123;</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, size, i);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// adjust the heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i=size<span class="number">-1</span>; i&gt;<span class="number">0</span>; i--) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[<span class="number">0</span>], nums[i]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, i, <span class="number">0</span>);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-
-
-
-
-
-
-<p><strong>总结：手撕排序算法是面试中最基本的技能，不仅要能口头描述出这些排序的用法和效率，还得在面试官需要的时候能够自己写出实现的代码并进行测试。</strong></p>
-<p><strong>在这些排序中，最重要的就是堆排序和快速排序。一定要手撕和会用</strong></p>
-]]></content>
+<p>上面的接口基本上把流程全部写出来了。</p>
+<p>数据结构</p>
+<ul>
+<li>Node：存储{key，value，freq}。一个Node相当于是一个信息的最小单元，每个信息都拥有这三个信息。（该数据结构和LRU中的pair&lt;int,int&gt;对应）</li>
+<li>keyToNode：以key为索引的哈希映射，由于每个key对应一条信息，因此只需要存储一个Node节点就行。这里还是和LRU一样，借助了iterator的优势，其映射值存储的只是一个迭代器，而无需将整个Node存储进该映射 ，因此其数据结构为<code>unordered_map&lt;int, list&lt;Node&gt;::iterator&gt;</code></li>
+<li>freqToNode: 以freq为索引的哈希映射，由于每个freq会对应多个节点，而且是删除最低频率的最旧节点，因此和LRU一样依旧带有时序性，这样的话依旧使用一个双向链表来该哈希映射的值部分，因此其数据结构为<code>unordered_map&lt;int, list&lt;Node&gt;&gt;</code></li>
+</ul>
+<p>方法流程</p>
+<ul>
+<li><p><code>get()</code>：该方法依旧和LRU一样，如果链表中没有该<code>key</code>,则返回-1。如果有，<strong>将其频率提升，</strong>返回其value</p>
+</li>
+<li><p><code>put()</code>：该方法的主要思想也依旧和LRU相似，如下图所示</p>
+<p><img src="/posts/undefined/put%E6%B5%81%E7%A8%8B.jpg" class title="put()大致逻辑 }&lt;&#x2F;p&gt; &lt;&#x2F;li&gt; &lt;&#x2F;ul&gt; &lt;h3 id&#x3D;代码细节&gt;&lt;a href&#x3D;#代码细节 class&#x3D;headerlink title&#x3D;代码细节&gt;&lt;&#x2F;a&gt;代码细节&lt;&#x2F;h3&gt;&lt;p&gt;get和put方法调用了两个函数方法，一个是&lt;code&gt;increaseFreq(int key)&lt;&#x2F;code&gt; ，一个是&lt;code&gt;deleteMinFreq();&lt;&#x2F;code&gt;&lt;&#x2F;p&gt; &lt;p&gt;下面来实现他们的细节&lt;&#x2F;p&gt; <figure class=" highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">increaseFreq</span><span class="params">(<span class="keyword">int</span> key)</span> </span>&#123;</span><br><span class="line">		<span class="comment">// 首先处理freqToNode</span></span><br><span class="line">		<span class="keyword">auto</span> node = keyToNode[key];</span><br><span class="line">		<span class="keyword">int</span> freq = node-&gt;freq;</span><br><span class="line">		<span class="keyword">int</span> val = node-&gt;value;</span><br><span class="line">		freqToNode[freq].<span class="built_in">erase</span>(node);</span><br><span class="line">		<span class="comment">// 如果freq是一对一，则整个freq都要删掉</span></span><br><span class="line">		<span class="keyword">if</span>(freqToNode[freq].<span class="built_in">size</span>() == <span class="number">0</span>) &#123;</span><br><span class="line">			freqToNode.<span class="built_in">erase</span>(freq);</span><br><span class="line">			<span class="keyword">if</span> (minFreq_ == freq)</span><br><span class="line">				minFreq_++;</span><br><span class="line">		&#125;</span><br><span class="line">		freqToNode[freq + <span class="number">1</span>].<span class="built_in">push_front</span>(<span class="built_in">Node</span>(key, val, freq + <span class="number">1</span>));</span><br><span class="line">		</span><br><span class="line">		<span class="comment">// 然后再处理keyToNode</span></span><br><span class="line">		keyToNode[key] = freqToNode[freq+<span class="number">1</span>].<span class="built_in">begin</span>();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">deleteMinFreq</span><span class="params">()</span> </span>&#123;</span><br><span class="line">		<span class="comment">// 删除MinFreq最旧的Node</span></span><br><span class="line">		<span class="keyword">auto</span> node = freqToNode[minFreq_].<span class="built_in">back</span>();</span><br><span class="line">		keyToNode.<span class="built_in">erase</span>(node.key);</span><br><span class="line">		freqToNode[minFreq_].<span class="built_in">pop_back</span>();</span><br><span class="line">		<span class="keyword">if</span>(freqToNode[minFreq_].<span class="built_in">size</span>() == <span class="number">0</span>) &#123;</span><br><span class="line">			freqToNode.<span class="built_in">erase</span>(minFreq_);</span><br><span class="line">			minFreq_++;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br></pre></td></tr></table> &lt;p&gt;至此，一个完整的LFU实现了&lt;&#x2F;p&gt; <figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Node</span> &#123;</span></span><br><span class="line">	<span class="keyword">int</span> key;</span><br><span class="line">	<span class="keyword">int</span> value;</span><br><span class="line">	<span class="keyword">int</span> freq;</span><br><span class="line">	<span class="built_in">Node</span>(<span class="keyword">int</span> key, <span class="keyword">int</span> value, <span class="keyword">int</span> freq) : <span class="built_in">key</span>(key), <span class="built_in">value</span>(value), <span class="built_in">freq</span>(freq) &#123;&#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">LFUCache</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">LFUCache</span>(<span class="keyword">int</span> capacity) : <span class="built_in">cap_</span>(capacity), <span class="built_in">minFreq_</span>(<span class="number">0</span>) &#123;</span><br><span class="line">		keyToNode.<span class="built_in">clear</span>();</span><br><span class="line">		freqToNode.<span class="built_in">clear</span>();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">int</span> <span class="title">get</span><span class="params">(<span class="keyword">int</span> key)</span> </span>&#123;</span><br><span class="line">		<span class="keyword">if</span> (cap_ == <span class="number">0</span>) <span class="keyword">return</span>  <span class="number">-1</span>;</span><br><span class="line">		<span class="built_in">increaseFreq</span>(key);</span><br><span class="line">		<span class="keyword">return</span> keyToNode[key]-&gt;value;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span> </span>&#123;</span><br><span class="line">		<span class="keyword">if</span>(keyToNode.<span class="built_in">count</span>(key)) &#123;</span><br><span class="line">			keyToNode[key]-&gt;value = value;</span><br><span class="line">			<span class="built_in">increaseFreq</span>(key);</span><br><span class="line">		&#125;<span class="keyword">else</span> &#123;</span><br><span class="line">			<span class="keyword">if</span>(keyToNode.<span class="built_in">size</span>() == cap_) &#123;</span><br><span class="line">				<span class="comment">// 容量已经满了,删除频率最小时序最差的node</span></span><br><span class="line">				<span class="built_in">deleteMinFreq</span>();</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="comment">// 插入新值</span></span><br><span class="line">			freqToNode[<span class="number">1</span>].<span class="built_in">push_front</span>(<span class="built_in">Node</span>(key, value, <span class="number">1</span>));</span><br><span class="line">			keyToNode[key] = freqToNode[<span class="number">1</span>].<span class="built_in">begin</span>();</span><br><span class="line">			<span class="comment">// 设置最小频率</span></span><br><span class="line">			minFreq_ = <span class="number">1</span>;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">increaseFreq</span><span class="params">(<span class="keyword">int</span> key)</span> </span>&#123;</span><br><span class="line">		<span class="comment">// 首先处理freqToNode</span></span><br><span class="line">		<span class="keyword">auto</span> node = keyToNode[key];</span><br><span class="line">		<span class="keyword">int</span> freq = node-&gt;freq;</span><br><span class="line">		<span class="keyword">int</span> val = node-&gt;value;</span><br><span class="line">		freqToNode[freq].<span class="built_in">erase</span>(node);</span><br><span class="line">		<span class="comment">// 如果freq是一对一，则整个freq都要删掉</span></span><br><span class="line">		<span class="keyword">if</span>(freqToNode[freq].<span class="built_in">size</span>() == <span class="number">0</span>) &#123;</span><br><span class="line">			freqToNode.<span class="built_in">erase</span>(freq);</span><br><span class="line">			<span class="keyword">if</span> (minFreq_ == freq)</span><br><span class="line">				minFreq_++;</span><br><span class="line">		&#125;</span><br><span class="line">		freqToNode[freq + <span class="number">1</span>].<span class="built_in">push_front</span>(<span class="built_in">Node</span>(key, val, freq + <span class="number">1</span>));</span><br><span class="line">		</span><br><span class="line">		<span class="comment">// 然后再处理keyToNode</span></span><br><span class="line">		keyToNode[key] = freqToNode[freq+<span class="number">1</span>].<span class="built_in">begin</span>();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">deleteMinFreq</span><span class="params">()</span> </span>&#123;</span><br><span class="line">		<span class="comment">// 删除MinFreq最旧的Node</span></span><br><span class="line">		<span class="keyword">auto</span> node = freqToNode[minFreq_].<span class="built_in">back</span>();</span><br><span class="line">		keyToNode.<span class="built_in">erase</span>(node.key);</span><br><span class="line">		freqToNode[minFreq_].<span class="built_in">pop_back</span>();</span><br><span class="line">		<span class="keyword">if</span>(freqToNode[minFreq_].<span class="built_in">size</span>() == <span class="number">0</span>) &#123;</span><br><span class="line">			freqToNode.<span class="built_in">erase</span>(minFreq_);</span><br><span class="line">			minFreq_++;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">int</span> cap_;</span><br><span class="line">	<span class="keyword">int</span> minFreq_;</span><br><span class="line">	<span class="comment">// 由于key和node是一对一的关系，因此是 unordered_map&lt;int, list&lt;Node&gt;::iterator&gt;</span></span><br><span class="line">	unordered_map&lt;<span class="keyword">int</span>, list&lt;Node&gt;::iterator&gt; keyToNode;</span><br><span class="line">	<span class="comment">// 由于freq和node是一对多的关系，因此是 unordered_map&lt;int, list&lt;Node&gt;&gt;</span></span><br><span class="line">	unordered_map&lt;<span class="keyword">int</span>, list&lt;Node&gt;&gt; freqToNode;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure> &lt;h3 id&#x3D;与LRU比较&gt;&lt;a href&#x3D;#与LRU比较 class&#x3D;headerlink title&#x3D;与LRU比较&gt;&lt;&#x2F;a&gt;与LRU比较&lt;&#x2F;h3&gt;&lt;ul&gt; &lt;li&gt;&lt;p&gt;概念上，LFU比LRU增加了一个频率的概念，相对复杂了不少。&lt;&#x2F;p&gt; &lt;&#x2F;li&gt; &lt;li&gt;&lt;p&gt;数据结构上：&lt;&#x2F;p&gt; &lt;ul&gt; &lt;li&gt;LRU：由于LRU只需要考虑时序性和O(1)的get和put，因此其使用的数据结构就是一个双向链表&lt;code&gt;list&lt;pair(int,int)&gt;&lt;&#x2F;code&gt;（&lt;code&gt;pair&lt;int,int&gt;&lt;&#x2F;code&gt;作为一个node）和一个{key: node}的哈希映射，node的话可以使用迭代器进行优化成&lt;code&gt;unordered_map&lt;int, list&lt;pair(int,int)&gt;::iterator&gt;&lt;&#x2F;code&gt;。&lt;&#x2F;li&gt; &lt;li&gt;LFU：&lt;ul&gt; &lt;li&gt;首先LFU增加了一个频率&lt;code&gt;freq&lt;&#x2F;code&gt;变量，因此不使用pair&lt;int,int&gt;存储{key，value}；而是使用Node(key, value, freq)存储节点信息。&lt;&#x2F;li&gt; &lt;li&gt;关于主要的哈希映射{key：node}，由于都是一对一的映射，因此和LRU一样使用&lt;code&gt;unordered_map&lt;int, list&lt;Node&gt;::iterator&gt;&lt;&#x2F;code&gt;。&lt;&#x2F;li&gt; &lt;li&gt;LFU的特点是&lt;strong&gt;增加了一个以频率为索引的哈希映射&lt;&#x2F;strong&gt;，由于频率映射可能有一对多的情况，就不能是{freq : node}了，而必须使用{freq : list&lt;Node&gt;}，因此LFU新增了一个哈希映射&lt;code&gt;unordered_map&lt;int, list&lt;Node&gt;&gt;&lt;&#x2F;code&gt;&lt;&#x2F;li&gt; &lt;&#x2F;ul&gt; &lt;&#x2F;li&gt; &lt;&#x2F;ul&gt; &lt;&#x2F;li&gt; &lt;li&gt;&lt;p&gt;接口实现上：&lt;&#x2F;p&gt; &lt;p&gt;两个接口的流程和逻辑基本相同，不过LFU中&lt;strong&gt;调用函数接口相应freq也会增加&lt;&#x2F;strong&gt;，相应所需的功能封装在&lt;code&gt;void increaseFreq(int key)&lt;&#x2F;code&gt;中。&lt;&#x2F;p&gt; &lt;&#x2F;li&gt; &lt;&#x2F;ul&gt; &lt;h3 id&#x3D;参考资料&gt;&lt;a href&#x3D;#参考资料 class&#x3D;headerlink title&#x3D;参考资料&gt;&lt;&#x2F;a&gt;参考资料&lt;&#x2F;h3&gt;&lt;p&gt;《labuladong的算法小抄》&lt;&#x2F;p&gt;"></p></li></ul>]]></content>
       <categories>
         <category>算法</category>
       </categories>
       <tags>
-        <tag>排序</tag>
+        <tag>LFU</tag>
+        <tag>经典算法</tag>
       </tags>
-  </entry>
-  <entry>
-    <title>RedisSDS</title>
-    <url>/posts/ddef0534/</url>
-    <content><![CDATA[<blockquote>
-<p>Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。</p>
-</blockquote>
-<span id="more"></span>
-
-<h3 id="1-SDS的定义"><a href="#1-SDS的定义" class="headerlink" title="1 SDS的定义"></a>1 SDS的定义</h3><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sds.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span>&#123;</span></span><br><span class="line">    <span class="comment">// 记录buf数组中已使用字节的数量</span></span><br><span class="line">    <span class="comment">// 等于SDS所保存的字符串长度</span></span><br><span class="line">    <span class="keyword">int</span> len;</span><br><span class="line">    <span class="comment">// 记录buf数组中未使用字节的数量</span></span><br><span class="line">    <span class="keyword">int</span> <span class="built_in">free</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 字节数组，用于保存字符串</span></span><br><span class="line">    <span class="keyword">char</span> buf[];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p><em>tag： 由于SDS遵循C字符串以空字符结尾的惯例， 保存空字符的1字节空间不计算在SDS的Len属性里面，并且为空字符自动生成一个字节空间</em></p>
-<h3 id="2-SDS和C字符串的区别"><a href="#2-SDS和C字符串的区别" class="headerlink" title="2 SDS和C字符串的区别"></a>2 SDS和C字符串的区别</h3><p>​    由于Redis对字符串在安全性，效率以及功能上都有需求， 因此SDS比传统字符串有着不少优化。</p>
-<ul>
-<li><p><strong>常数复杂度获取字符串长度</strong></p>
-<p>C字符串获取长度靠<code>strlen</code>(O(n)), Redis是靠着<code>sds.len</code>直接获得。</p>
-</li>
-<li><p><strong>杜绝缓冲区的溢出</strong></p>
-<p>C字符串容易造成缓冲区的溢出，而SDS的空间分配策略完全杜绝了发生缓冲区溢出的可能性：当SDS的API需要对SDS进行修改时，API会先检查SDS的空间是否满足修改所需的要求。如果不满足，那么就会执行空间扩展工作。</p>
-</li>
-<li><p><strong>减少修改字符串时带来的内存重分配次数</strong></p>
-<ul>
-<li><p>C字符串被增长或者缩短时，程序都要对该字符串进行一次内存重分配操作。</p>
-</li>
-<li><p>针对未使用空间<code>sds.free</code>， SDS解除了字符串长度和底层数组长度之间的关联。从而实现了<strong>空间预分配和惰性空间释放</strong>两种优化策略。</p>
-<ul>
-<li><p>空间预分配： 当API对一个SDS进行修改，并且需要对SDS进行空间扩展的时候，程序<strong>不仅会为SDS分配修改所必须要的空间，还会分配额外的未使用空间</strong>。</p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 分配机制</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span> <span class="title">sds</span>;</span></span><br><span class="line"><span class="keyword">int</span> needlen;			<span class="comment">// sds字符串需要存储的字符串长度</span></span><br><span class="line"><span class="keyword">if</span>(sds.len &lt; <span class="number">1024</span>*<span class="number">1024</span>)	<span class="comment">// 1024*1024 = 1MB</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 分配空间至len</span></span><br><span class="line">    sds.len = needlen;</span><br><span class="line">    sds.<span class="built_in">free</span> = sds.len <span class="comment">// 保持一样</span></span><br><span class="line">    <span class="comment">//so strlen(sds.buf) = len + free + 1;</span></span><br><span class="line">&#125;<span class="keyword">else</span>&#123;</span><br><span class="line">    sds.len = needlen;</span><br><span class="line">    sds.<span class="built_in">free</span> = <span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
-<li><p>惰性空间释放： 用于优化SDS的字符串缩短操作。 API需要缩短SDS保存的字符串时，程序并不立即使用内存重分配来回收缩短后多出来的字节，而是使用free属性将这些字节的数量纪录起来，并等待将来使用。</p>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><p><strong>二进制安全</strong></p>
-<ul>
-<li><p>C字符串中的字符必须符合某种编码(如ASCII),并且<strong>除了字符串的末尾之外，字符串里面不能含有空字符</strong>（这个是因为程序读C字符串遇到空字符就默认这是字符串结尾）。 由于这些限制，<strong>C字符串只能保存文本数据，而不能保存像图片、音频、视频压缩文件这些二进制数据。</strong></p>
-</li>
-<li><p>SDS中的buf数组，既可以保存一系列字符，也可以保存一系列二进制数据。（其实可以理解为该数组可以保存空字符串，因为长度是已知的，程序不需要通过空字符串的位置判断这个字符串是否结束）</p>
-</li>
-</ul>
-</li>
-<li><p><strong>兼容部分C字符串函数</strong></p>
-<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="built_in">strcat</span>(s_string, sds-&gt;buf);</span><br><span class="line"><span class="comment">// 可以使用str相关的api</span></span><br></pre></td></tr></table></figure></li>
-<li><p><strong>总结</strong></p>
-<ul>
-<li>C字符串：<ul>
-<li>获取字符串长度的时间复杂度是O(N)</li>
-<li>API不安全，可能会造成缓冲区溢出</li>
-<li>修改字符串长度N次<strong>必然</strong>需要执行N次内存重分配</li>
-<li>只能保存文本数据</li>
-<li>可以使用<strong>所有</strong><code>&lt;string.h&gt;</code>的库函数</li>
-</ul>
-</li>
-<li>SDS：<ul>
-<li>获取字符串长度的时间复杂度是O(1)</li>
-<li>AP安全，不会造成缓冲区溢出</li>
-<li>修改字符串长度N次<strong>最多</strong>需要执行N次内存重分配</li>
-<li>能保存文本数据和二进制数据</li>
-<li>可以使用<strong>一部分</strong><code>&lt;string.h&gt;</code>的库函数</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-SDS-API"><a href="#3-SDS-API" class="headerlink" title="3 SDS API"></a>3 SDS API</h3><p>​    |       函数        |                                  作用                                     |                          时间复杂度</p>
-<ul>
-<li><p><code>sdsnew</code>           创建一个包含给定C字符串的SDS                          <code>O(N), N = strlen(str)</code></p>
-</li>
-<li><p><code>sdsempty</code>       创建一个不包含任何内容的空SDS                        <code>O(1)</code></p>
-</li>
-<li><p><code>sdsfree</code>         释放给定的SDS                                                       <code>O(N), N = strlen(str)</code></p>
-</li>
-<li><p><code>sdslen</code>           返回SDS已使用空间字节数                                    <code>O(1), get from sds-&gt;len</code></p>
-</li>
-<li><p><code>sdsavail </code>       返回SDS未使用空间字节数                                    <code>O(1), get from sds-&gt;free</code></p>
-</li>
-<li><p><code>sdsdup</code>           创建一个给定SDS的副本(copy)                             <code>O(N), N = strlen(str)</code></p>
-</li>
-<li><p><code>sdsclear</code>       清空SDS保存的字符串内容                                    <code>O(1), 惰性空间释放策略！</code>  -&gt; <strong>mark</strong></p>
-</li>
-<li><p><code>sdscat</code>           将给定C字符串拼接到SDS字符串的末尾               <code>O(N)，N = strlen(str) </code></p>
-</li>
-<li><p><code>sdscatsds</code>     将给定SDS字符串拼接到另一个SDS字符串末尾   <code>O(N)，N = strlen(str)</code></p>
-</li>
-<li><p><code>sdscpy</code>           <strong>将给定C字符串复制到SDS里面，</strong></p>
-<p>​                            <strong>覆盖SDS原有字符串</strong>                                              <code>O(N)，N = strlen(str)</code></p>
-</li>
-<li><p><code>sdsgrowzero</code>  用空字符将SDS扩展至给定长度                            <code>O(N),N为扩展新增的字节数</code></p>
-</li>
-<li><p><code>sdsrange</code>       保留SDS给定区间内的数据，</p>
-<p>​                        不在区间内的数据会被覆盖或清除                          <code>O(N),N为保留数据的字节数</code></p>
-</li>
-<li><p><code>sdstrim</code>         接收一个SDS和一个C字符串作为参数，                <code>O(N*M),M为SDS的长度，N为给定C字符串的长度</code></p>
-<p>​                        从SDS左右两端分别移除所有在C字符串中出现过的字符   </p>
-</li>
-<li><p><code>sdscmp</code>           比较两个SDS字符串是否相同                                 <code>O(N), N为两个SDS中较短的那个SDS的长度</code>                </p>
-</li>
-</ul>
-]]></content>
-      <categories>
-        <category>Redis</category>
-      </categories>
-      <tags>
-        <tag>Redis</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Hello World</title>
-    <url>/posts/4a17b156/</url>
-    <content><![CDATA[<p>Welcome to <a href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/writing.html">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/server.html">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/generating.html">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
-]]></content>
   </entry>
 </search>
