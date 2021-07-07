@@ -28,18 +28,6 @@
       </tags>
   </entry>
   <entry>
-    <title>test</title>
-    <url>/posts/d87f7e0c/</url>
-    <content><![CDATA[<p><img src="/posts/d87f7e0c/20210405124907768.jpg"></p>
-]]></content>
-      <categories>
-        <category>test</category>
-      </categories>
-      <tags>
-        <tag>test</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>面向对象</title>
     <url>/posts/28239a8d/</url>
     <content><![CDATA[<h4 id="对OOP的理解"><a href="#对OOP的理解" class="headerlink" title="对OOP的理解"></a>对OOP的理解</h4><p>​    面向对象是一种将数据封装成类，针对类进行操作的方法。其核心思想是数据抽象、继承和动态绑定。（这也是oop的三大特性）</p>
