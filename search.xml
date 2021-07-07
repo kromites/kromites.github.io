@@ -28,6 +28,18 @@
       </tags>
   </entry>
   <entry>
+    <title>test</title>
+    <url>/posts/d87f7e0c/</url>
+    <content><![CDATA[<p><img src="/posts/d87f7e0c/20210405124907768.jpg"></p>
+]]></content>
+      <categories>
+        <category>test</category>
+      </categories>
+      <tags>
+        <tag>test</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>面向对象</title>
     <url>/posts/28239a8d/</url>
     <content><![CDATA[<h4 id="对OOP的理解"><a href="#对OOP的理解" class="headerlink" title="对OOP的理解"></a>对OOP的理解</h4><p>​    面向对象是一种将数据封装成类，针对类进行操作的方法。其核心思想是数据抽象、继承和动态绑定。（这也是oop的三大特性）</p>
@@ -72,9 +84,11 @@
 <figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">using</span> <span class="keyword">namespace</span> std;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Base</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">fun</span><span class="params">()</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;Base::fun()&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line"></span><br><span class="line">	<span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">fun1</span><span class="params">()</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;Base::fun1()&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line"></span><br><span class="line">	<span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">fun2</span><span class="params">()</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;Base::fun2()&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Derive</span> :</span> <span class="keyword">public</span> Base</span><br><span class="line">&#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="function"><span class="keyword">void</span> <span class="title">fun</span><span class="params">()</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;Derive::fun()&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line"></span><br><span class="line">	<span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">D_fun1</span><span class="params">()</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;Derive::D_fun1()&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line"></span><br><span class="line">	<span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">D_fun2</span><span class="params">()</span> </span>&#123; cout &lt;&lt; <span class="string">&quot;Derive::D_fun2()&quot;</span> &lt;&lt; endl; &#125;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	Base *p = <span class="keyword">new</span> <span class="built_in">Derive</span>();</span><br><span class="line">	p-&gt;<span class="built_in">fun</span>(); <span class="comment">// Derive::fun() 调用派生类中的虚函数</span></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p>基类的虚函数表如下</p>
-<p><img src="/.io//28239a8d/%E8%99%9A%E5%87%BD%E6%95%B01.png"></p>
+
+
 <p>派生类的虚函数表如下</p>
-<p><img src="/.io//28239a8d/%E8%99%9A%E5%87%BD%E6%95%B02.png"></p>
+
+
 <p>简单解释：当基类的指针指向派生类的对象时，通过派生类的对象的虚表指针找到虚函数表（派生类的对象虚函数表），进而找到相应的虚函数 Derive::f() 进行调用。</p>
 <h4 id="纯虚函数"><a href="#纯虚函数" class="headerlink" title="纯虚函数"></a>纯虚函数</h4><p>​    上个回答我们已经知道了什么是虚函数，那么什么是纯虚函数呢？</p>
 <p>纯虚函数：</p>
@@ -119,7 +133,7 @@
 <figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span>&#123;</span></span><br><span class="line">	<span class="built_in">A</span>(<span class="keyword">const</span> A&amp; tmp);				<span class="comment">// 拷贝构造函数</span></span><br><span class="line">    A&amp; <span class="keyword">operator</span>=(<span class="keyword">const</span> A &amp;tmp);		<span class="comment">// 赋值函数</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
 <p>如果其中的<code>A(const A&amp; tmp)</code> 变为<code>A(const A temp)</code>,那么<code>const A temp</code>这个形参和实参<code>A b(a)</code>相结合的时候是<strong>要调用本类的拷贝构造函数，这样的话就成了死循环！</strong></p>
-<img src="/.io//28239a8d/cpctor.jpg" class title="This is an example image">
+<img src="/posts/28239a8d/cpctor.jpg" class title="复制构造循环引用">
 
 <h4 id="为什么会使用初始化列表？"><a href="#为什么会使用初始化列表？" class="headerlink" title="为什么会使用初始化列表？"></a>为什么会使用初始化列表？</h4><ul>
 <li><p>当没有初始化列表之前，对象的成员变量初始化动作是在调用默认构造函数的时候发生的，因此对成员变量初始化，最开始是必须得调用一次默认构造函数。</p>
