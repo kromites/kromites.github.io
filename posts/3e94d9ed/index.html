@@ -137,7 +137,7 @@
 <meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5.png">
 <meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5.png">
 <meta property="article:published_time" content="2021-07-09T05:27:56.000Z">
-<meta property="article:modified_time" content="2021-07-09T07:30:14.322Z">
+<meta property="article:modified_time" content="2021-07-09T08:36:29.072Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="编译">
 <meta property="article:tag" content="内存">
@@ -443,7 +443,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  2.6k
+                  4.1k
                 </span>
               
 
@@ -459,7 +459,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  8
+                  14
                 </span>
               
             </div>
@@ -578,18 +578,77 @@
 </ul>
 <p>明确了链接的分类之后，想必都明白在编译过程中的链接一般都指的是静态链接。</p>
 <p>下面我们介绍链接器做了什么。</p>
-<h4 id="空间与地址分配"><a href="#空间与地址分配" class="headerlink" title="空间与地址分配"></a>空间与地址分配</h4><p>​    链接器如何将输入文件中的各个段合并到输出文件？如果只是单纯的按照目标文件次序叠加，那这样在目标文件中会有很多零散的段，这样会造成内存空间大量的内部碎片，所以这并不是一个很好的方案。</p>
+<h4 id="静态链接器的工作"><a href="#静态链接器的工作" class="headerlink" title="静态链接器的工作"></a>静态链接器的工作</h4><p>​    链接器如何将输入文件中的各个段合并到输出文件？如果只是单纯的按照目标文件次序叠加，那这样在目标文件中会有很多零散的段，这样会造成内存空间大量的内部碎片，所以这并不是一个很好的方案。</p>
 <ul>
 <li><p>相似段合并：该方法顾名思义，将输入文件中相似的段合并成到统一的区域中，这样的话目标文件中就依然还是正常的内存分区，不过，如何将输入文件正确映射到输出文件相应的段？ 在这里采用<strong>两步链接</strong>的方法。</p>
 </li>
 <li><p>两步链接：</p>
 <ul>
-<li>第一步：空间与地址分配</li>
-<li>第二部：符号解析与重定位</li>
+<li>第一步，空间与地址分配：扫描所有的输入目标文件，获得它们的各个段的长度、属性和位置，并且将输入目标文件中的符号表中所有的符号定义和符号引用收集起来，统一放到一个<strong>全局符号表</strong>。在这一步，链接器能够获得所有输入文件段的长度，并将其合并，计算出输出文件中各个段合并后的长度与位置，并建立映射关系。</li>
+<li>第二步，符号解析与重定位：利用第一步收集到的所有信息，读取输入文件段的数据，重定位信息，惊醒符号分析和重定位，调整代码中的地址等。事实上第二步才是链接过程的核心。</li>
 </ul>
 </li>
 </ul>
-<p>本小节介绍空间与地址分配，</p>
+<h4 id="空间与地址分配"><a href="#空间与地址分配" class="headerlink" title="空间与地址分配"></a>空间与地址分配</h4><p>​    空间与地址分配该步骤做了以下两件事：（当然，这种地址空间都是虚拟地址）</p>
+<ul>
+<li><p>根据输入文件的段长、属性等给输<strong>出文件分配一个内存地址空间</strong>，而且还在内存地址空间中划分了各个段的地址。</p>
+</li>
+<li><p>生成一个<strong>全局符号表</strong>，全局符号表中有着输入文件中符号表中华所有的符号定义和符号引用。为第二步的符号解析和重定位做准备。</p>
+<p>（符号——函数和变量的统称）</p>
+</li>
+</ul>
+<h4 id="符号解析与重定位"><a href="#符号解析与重定位" class="headerlink" title="符号解析与重定位"></a>符号解析与重定位</h4><ol>
+<li><p><strong>为什么需要重定位？</strong></p>
+<p>在重定位之前，输入文件的取址地址都在其原来的文件中，现在那些文件合成一个输出文件，其符号的地址可能会发生变化（尤其是绝对地址，一般都会改变），如何此时还是按照原来的地址进行寻址，会找不到符号的定义，从而产生链接的错误。因此需要进行重定位。</p>
+<p>在生成全局符号表之后，链接器已经确认了所有符号的虚拟地址了，那么此时链接器就可以根据符号的地址对每个需要重定位的指令进行地址修正。</p>
+</li>
+<li><p><strong>如何知道什么指令需要重定位？</strong></p>
+<p>在ELF目标文件中，有一个重定位表，记录这与重定位相关的信息，用来描述如何修改相应的段里的内容。因此每个<strong>要被重定位的ELF段都有一个重定位表</strong>。</p>
+<p>举个例子：如果该文件的代码段<code>.text</code>需要重定位，那么ELF会生成一个重定位表，放在<code>.rel.text</code>中，如果是<code>.data</code>,那也会有<code>.rel.data</code>出现。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> objdump -r a.o   						<span class="comment"># 假设有个a.o的目标文件</span></span></span><br><span class="line">a.o: 	file formate elf32-i386</span><br><span class="line"></span><br><span class="line">RELOCATION RECORDS FOR [.text]			# .text段需要重定位</span><br><span class="line">OFFSET		TYPE			VALUE		# 这表明有两个重定位入口，以下两行展示了其偏移地址，类型和符号名称的信息</span><br><span class="line">0000001c	R_386_32	 	shared</span><br><span class="line">00000027	R_386_PC32		swap	</span><br></pre></td></tr></table></figure></li>
+<li><p>重定位地址</p>
+<ul>
+<li>重定位入口：每个要被重定位的地方，在上面的代码中两行代表两个入口。</li>
+<li>偏移： 重定位入口在该段的偏移地址，即该段中需要被调整的位置。</li>
+</ul>
+</li>
+<li><p><strong>符号解析</strong></p>
+<p>还是按照上面那个例子，如果直接汇编执行<code>a.o</code>的话，会出现<code>shared</code>和<code>swap</code>两个符号没有被定义，从而链接错误。</p>
+<p>通过在重定位中对符号进行解析，对需要重定位的符号查询全局符号表，找到相应的符号和符号地址进行重定位。</p>
+</li>
+</ol>
+<h3 id="堆和栈"><a href="#堆和栈" class="headerlink" title="堆和栈"></a>堆和栈</h3><h4 id="堆和栈的区别"><a href="#堆和栈的区别" class="headerlink" title="堆和栈的区别"></a>堆和栈的区别</h4><ul>
+<li><p>申请方式：栈是系统自动分配，堆是程序员主动申请。</p>
+</li>
+<li><p>申请后系统响应：分配栈空间，如果剩余空间大于申请空间则分配成功，否则分配失败栈溢出；申请堆空间，<strong>堆在内存中呈现的方式类似于链表（记录空闲地址空间的链表），在链表上寻找第一个大于申请空间的节点分配给程序，将该节点从链表中删除</strong>，大多数系统中该块空间的首地址存放的是本次分配空间的大小，便于释放，将该块空间上的剩余空间再次连接在空闲链表上。</p>
+</li>
+<li><p>栈在内存中是<strong>连续</strong>的一块空间（向低地址扩展）<strong>最大容量是系统预定好的****，堆在内存中的空间（向高地址扩展）是不连续的</strong>。</p>
+</li>
+<li><p>申请效率：栈是有<strong>系统自动分配，申请效率高，但程序员无法控制</strong>；堆是由<strong>程序员主动申请，效率低，使用起来方便但是容易产生碎片</strong>。</p>
+</li>
+<li><p>存放的内容：<strong>栈中存放的是局部变量，函数的参数；堆中存放的内容由程序员控制</strong>。</p>
+</li>
+</ul>
+<h4 id="对象创建限制在堆或栈上"><a href="#对象创建限制在堆或栈上" class="headerlink" title="对象创建限制在堆或栈上"></a>对象创建限制在堆或栈上</h4><p>说明：C++ 中的类的对象的建立分为两种：静态建立、动态建立。</p>
+<ul>
+<li>静态建立：<strong>由编译器为对象在栈空间上分配内存，直接调用类的构造函数创建对象</strong>。例如：A a;</li>
+<li>动态建立：<strong>使用 new 关键字在堆空间上创建对象，底层首先调用 operator new() 函数，在堆空间上寻找合适的内存并分配</strong>；然后，调用类的构造函数创建对象。</li>
+</ul>
+<p>限制对象在堆上：</p>
+<ul>
+<li>将构造函数和析构函数设置为<code>protected</code>（对于子女、朋友来说，就是public的，可以自由使用，没有任何限制，而对于其他的外部class，protected就变成private。）</li>
+<li>使用一个静态函数完成构造，（因为该对象还没有被创建，所以想使用类内的方法必须得是<code>static</code>函数，这点和单例模式一样）</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line"><span class="keyword">protected</span>:</span><br><span class="line">    <span class="built_in">A</span>() &#123;&#125;</span><br><span class="line">    ~<span class="built_in">A</span>() &#123;&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">static</span> A *<span class="title">create</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> <span class="built_in">A</span>();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">destory</span><span class="params">()</span></span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="keyword">delete</span> <span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+
+
+<p>限制对象在栈上：</p>
+<ul>
+<li>直接将<code>operator new</code> 和 <code>operator delete</code>给<code>=delete</code>标识。</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">A</span>() &#123;&#125;</span><br><span class="line">    ~<span class="built_in">A</span>() &#123;&#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">void</span> *<span class="keyword">operator</span> <span class="title">new</span><span class="params">(<span class="keyword">size_t</span> t)</span> </span>= <span class="keyword">delete</span>;  	<span class="comment">// 注意函数的第一个参数和返回值都是固定的</span></span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="keyword">operator</span> <span class="title">delete</span><span class="params">(<span class="keyword">void</span> *ptr)</span> </span>= <span class="keyword">delete</span>; 	<span class="comment">// 重载了 new 就需要重载 delete</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
 
       
     </div>
@@ -845,7 +904,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">程序编译过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%88%86%E5%8C%BA"><span class="nav-number">2.</span> <span class="nav-text">内存分区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">编译器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%8D%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.1.</span> <span class="nav-text">词法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.2.</span> <span class="nav-text">语法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90"><span class="nav-number">3.3.</span> <span class="nav-text">语义分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96"><span class="nav-number">3.4.</span> <span class="nav-text">源代码优化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%AE%E6%A0%87%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90%E4%B8%8E%E4%BC%98%E5%8C%96"><span class="nav-number">3.5.</span> <span class="nav-text">目标代码生成与优化</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">链接器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%88%86%E7%B1%BB"><span class="nav-number">4.1.</span> <span class="nav-text">链接分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A9%BA%E9%97%B4%E4%B8%8E%E5%9C%B0%E5%9D%80%E5%88%86%E9%85%8D"><span class="nav-number">4.2.</span> <span class="nav-text">空间与地址分配</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">程序编译过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%88%86%E5%8C%BA"><span class="nav-number">2.</span> <span class="nav-text">内存分区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">编译器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%8D%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.1.</span> <span class="nav-text">词法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.2.</span> <span class="nav-text">语法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90"><span class="nav-number">3.3.</span> <span class="nav-text">语义分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96"><span class="nav-number">3.4.</span> <span class="nav-text">源代码优化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%AE%E6%A0%87%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90%E4%B8%8E%E4%BC%98%E5%8C%96"><span class="nav-number">3.5.</span> <span class="nav-text">目标代码生成与优化</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">链接器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%88%86%E7%B1%BB"><span class="nav-number">4.1.</span> <span class="nav-text">链接分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5%E5%99%A8%E7%9A%84%E5%B7%A5%E4%BD%9C"><span class="nav-number">4.2.</span> <span class="nav-text">静态链接器的工作</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A9%BA%E9%97%B4%E4%B8%8E%E5%9C%B0%E5%9D%80%E5%88%86%E9%85%8D"><span class="nav-number">4.3.</span> <span class="nav-text">空间与地址分配</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%AC%A6%E5%8F%B7%E8%A7%A3%E6%9E%90%E4%B8%8E%E9%87%8D%E5%AE%9A%E4%BD%8D"><span class="nav-number">4.4.</span> <span class="nav-text">符号解析与重定位</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A0%86%E5%92%8C%E6%A0%88"><span class="nav-number">5.</span> <span class="nav-text">堆和栈</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A0%86%E5%92%8C%E6%A0%88%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">5.1.</span> <span class="nav-text">堆和栈的区别</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AF%B9%E8%B1%A1%E5%88%9B%E5%BB%BA%E9%99%90%E5%88%B6%E5%9C%A8%E5%A0%86%E6%88%96%E6%A0%88%E4%B8%8A"><span class="nav-number">5.2.</span> <span class="nav-text">对象创建限制在堆或栈上</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -879,7 +938,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">22.7k</span>
+    <span title="Site words total count">24.2k</span>
   
 </div>
 <!--
