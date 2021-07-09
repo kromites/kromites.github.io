@@ -130,19 +130,19 @@
 <meta property="og:site_name" content="Kromite">
 <meta property="og:description" content="C&#x2F;C++文件如何从一个源文件{.c&#x2F;.cpp}变成一个可执行文件？在这过程中，其内存管理又是怎么样的？ 本篇文章就来讲一讲这些内容。">
 <meta property="og:locale">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E9%93%BE%E6%8E%A5%E8%BF%87%E7%A8%8B.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%86%85%E5%AD%98%E5%88%86%E6%AE%B5.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B.jpg">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5.png">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B.png">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E9%93%BE%E6%8E%A5%E8%BF%87%E7%A8%8B.png">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E5%86%85%E5%AD%98%E5%88%86%E6%AE%B5.png">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B.jpg">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5.png">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5.png">
 <meta property="article:published_time" content="2021-07-09T05:27:56.000Z">
-<meta property="article:modified_time" content="2021-07-09T06:57:48.427Z">
+<meta property="article:modified_time" content="2021-07-09T07:30:14.322Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="编译">
 <meta property="article:tag" content="内存">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="http://kromites.github.io/posts/undefined/%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B.png">
+<meta name="twitter:image" content="http://kromites.github.io/posts/3e94d9ed/%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B.png">
 
 
 
@@ -443,7 +443,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  2.4k
+                  2.6k
                 </span>
               
 
@@ -499,13 +499,13 @@
 <li><p>链接：汇编程序生成的目标文件，不会立即执行。因为可能会出现.cpp文件函数引用了另一个.cpp文件中定义的符号或者调用某个库文件中的函数，这样的话需要将这些文件链接成一个整体，生成(.exe)可执行文件。</p>
 </li>
 </ul>
-<img src="/posts/undefined/%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B.png" class title="编译过程">
+<img src="/posts/3e94d9ed/%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B.png" class title="编译过程">
 
-<img src="/posts/undefined/%E9%93%BE%E6%8E%A5%E8%BF%87%E7%A8%8B.png" class title="链接过程">
+<img src="/posts/3e94d9ed/%E9%93%BE%E6%8E%A5%E8%BF%87%E7%A8%8B.png" class title="链接过程">
 
 
 
-<h3 id="C-内存管理"><a href="#C-内存管理" class="headerlink" title="C++内存管理"></a>C++内存管理</h3><p>c++内存分区：栈、堆、全局/静态存储区、常量存储区、代码区。</p>
+<h3 id="内存分区"><a href="#内存分区" class="headerlink" title="内存分区"></a>内存分区</h3><p>C++内存分区：栈、堆、全局/静态存储区、常量存储区、代码区。</p>
 <ul>
 <li>栈：存放函数的局部变量、函数参数、返回地址等，由编译器自动分配和释放。</li>
 <li>堆：动态申请的内存空间，就是由 malloc 分配的内存块，由程序员控制它的分配和释放，如果程序执行结束还没有释放，操作系统会自动回收。</li>
@@ -513,7 +513,7 @@
 <li>常量存储区（.data 段）：<strong>存放的是常量，不允许修改</strong>，程序运行结束自动释放。</li>
 <li>代码区（.text 段）：<strong>存放代码，不允许修改，但可以执行</strong>。编译后的二进制文件存放在这里。</li>
 </ul>
-<img src="/posts/undefined/%E5%86%85%E5%AD%98%E5%88%86%E6%AE%B5.png" class title="内存分段">
+<img src="/posts/3e94d9ed/%E5%86%85%E5%AD%98%E5%88%86%E6%AE%B5.png" class title="内存分段">
 
 <p>从图中可以看出，32bitCPU可寻址<strong>4G线性空间</strong>，每个进程都有各自对的4G逻辑地址，其中0<del>3G是用户态，3</del>4G是内核态空间。</p>
 <p>各个段说明如下：</p>
@@ -537,7 +537,7 @@
 </ul>
 <h3 id="编译器做了什么"><a href="#编译器做了什么" class="headerlink" title="编译器做了什么"></a>编译器做了什么</h3><p>从最直观的角度来讲，编译器就是将<strong>高级语言翻译成机器语言</strong>的一个工具。</p>
 <p>编译过程一般分为6步： 扫描、语法分析、语义分析、源代码优化、代码生成、目标代码优化。</p>
-<img src="/posts/undefined/%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B.jpg" class title="编译流程">
+<img src="/posts/3e94d9ed/%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B.jpg" class title="编译流程">
 
 <p>实际上就是三步：分析代码，优化代码，生成代码。</p>
 <h4 id="词法分析"><a href="#词法分析" class="headerlink" title="词法分析"></a>词法分析</h4><p>​    首先将源代码程序输入到扫描器（Scanner），然后在其中进行词法分析。词法分析是简单借助有限状态机将源代码的字符序列分割成一系列的记<strong>号</strong>，然后逐个去判断是否有<strong>词法错误</strong>。</p>
@@ -572,13 +572,24 @@
 <p>二者优缺点对比：</p>
 <ul>
 <li><p>静态链接：将程序调用的库一起打包到可执行文件中，这样执行时就不需要调用别的库了，<strong>速度快</strong>，但是<strong>链接的时候可能同一个库链接了好几次，导致空间浪费，而且如果该库更新了的话，整个程序需要重新编译</strong>（更新困难）；</p>
-<img src="/posts/undefined/%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5.png" class title="静态链接"></li>
+<img src="/posts/3e94d9ed/%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5.png" class title="静态链接"></li>
 <li><p>动态链接：在程序执行时才载入引用的库，因此<strong>方便更新</strong>。而且只需要一次拷贝，<strong>节省内存</strong>。但是每次执行都需要链接，相比静态链接会有一定的性能损失。</p>
-<img src="/posts/undefined/%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5.png" class title="动态链接"></li>
+<img src="/posts/3e94d9ed/%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5.png" class title="动态链接"></li>
 </ul>
 <p>明确了链接的分类之后，想必都明白在编译过程中的链接一般都指的是静态链接。</p>
 <p>下面我们介绍链接器做了什么。</p>
-<h4 id="空间与地址分配"><a href="#空间与地址分配" class="headerlink" title="空间与地址分配"></a>空间与地址分配</h4><p>​    链接器如何将输入文件中的各个段</p>
+<h4 id="空间与地址分配"><a href="#空间与地址分配" class="headerlink" title="空间与地址分配"></a>空间与地址分配</h4><p>​    链接器如何将输入文件中的各个段合并到输出文件？如果只是单纯的按照目标文件次序叠加，那这样在目标文件中会有很多零散的段，这样会造成内存空间大量的内部碎片，所以这并不是一个很好的方案。</p>
+<ul>
+<li><p>相似段合并：该方法顾名思义，将输入文件中相似的段合并成到统一的区域中，这样的话目标文件中就依然还是正常的内存分区，不过，如何将输入文件正确映射到输出文件相应的段？ 在这里采用<strong>两步链接</strong>的方法。</p>
+</li>
+<li><p>两步链接：</p>
+<ul>
+<li>第一步：空间与地址分配</li>
+<li>第二部：符号解析与重定位</li>
+</ul>
+</li>
+</ul>
+<p>本小节介绍空间与地址分配，</p>
 
       
     </div>
@@ -834,7 +845,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">程序编译过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#C-%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86"><span class="nav-number">2.</span> <span class="nav-text">C++内存管理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">编译器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%8D%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.1.</span> <span class="nav-text">词法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.2.</span> <span class="nav-text">语法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90"><span class="nav-number">3.3.</span> <span class="nav-text">语义分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96"><span class="nav-number">3.4.</span> <span class="nav-text">源代码优化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%AE%E6%A0%87%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90%E4%B8%8E%E4%BC%98%E5%8C%96"><span class="nav-number">3.5.</span> <span class="nav-text">目标代码生成与优化</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">链接器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%88%86%E7%B1%BB"><span class="nav-number">4.1.</span> <span class="nav-text">链接分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A9%BA%E9%97%B4%E4%B8%8E%E5%9C%B0%E5%9D%80%E5%88%86%E9%85%8D"><span class="nav-number">4.2.</span> <span class="nav-text">空间与地址分配</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">程序编译过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%88%86%E5%8C%BA"><span class="nav-number">2.</span> <span class="nav-text">内存分区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">编译器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%8D%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.1.</span> <span class="nav-text">词法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.2.</span> <span class="nav-text">语法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90"><span class="nav-number">3.3.</span> <span class="nav-text">语义分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96"><span class="nav-number">3.4.</span> <span class="nav-text">源代码优化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%AE%E6%A0%87%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90%E4%B8%8E%E4%BC%98%E5%8C%96"><span class="nav-number">3.5.</span> <span class="nav-text">目标代码生成与优化</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">链接器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%88%86%E7%B1%BB"><span class="nav-number">4.1.</span> <span class="nav-text">链接分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A9%BA%E9%97%B4%E4%B8%8E%E5%9C%B0%E5%9D%80%E5%88%86%E9%85%8D"><span class="nav-number">4.2.</span> <span class="nav-text">空间与地址分配</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -868,7 +879,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">22.5k</span>
+    <span title="Site words total count">22.7k</span>
   
 </div>
 <!--
