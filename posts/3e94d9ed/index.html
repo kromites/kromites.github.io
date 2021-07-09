@@ -136,8 +136,9 @@
 <meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E7%BC%96%E8%AF%91%E6%B5%81%E7%A8%8B.jpg">
 <meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5.png">
 <meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5.png">
+<meta property="og:image" content="http://kromites.github.io/posts/3e94d9ed/brk.jpg">
 <meta property="article:published_time" content="2021-07-09T05:27:56.000Z">
-<meta property="article:modified_time" content="2021-07-09T08:36:29.072Z">
+<meta property="article:modified_time" content="2021-07-09T09:10:36.369Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="编译">
 <meta property="article:tag" content="内存">
@@ -443,7 +444,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  4.1k
+                  4.6k
                 </span>
               
 
@@ -459,7 +460,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  14
+                  15
                 </span>
               
             </div>
@@ -622,7 +623,7 @@
 </li>
 <li><p>申请后系统响应：分配栈空间，如果剩余空间大于申请空间则分配成功，否则分配失败栈溢出；申请堆空间，<strong>堆在内存中呈现的方式类似于链表（记录空闲地址空间的链表），在链表上寻找第一个大于申请空间的节点分配给程序，将该节点从链表中删除</strong>，大多数系统中该块空间的首地址存放的是本次分配空间的大小，便于释放，将该块空间上的剩余空间再次连接在空闲链表上。</p>
 </li>
-<li><p>栈在内存中是<strong>连续</strong>的一块空间（向低地址扩展）<strong>最大容量是系统预定好的****，堆在内存中的空间（向高地址扩展）是不连续的</strong>。</p>
+<li><p>栈在内存中是<strong>连续</strong>的一块空间（向低地址扩展）<strong>最大容量是系统预定好的</strong>，<strong>堆在内存中的空间（向高地址扩展）是不连续的</strong>。</p>
 </li>
 <li><p>申请效率：栈是有<strong>系统自动分配，申请效率高，但程序员无法控制</strong>；堆是由<strong>程序员主动申请，效率低，使用起来方便但是容易产生碎片</strong>。</p>
 </li>
@@ -649,6 +650,33 @@
 </ul>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">A</span>() &#123;&#125;</span><br><span class="line">    ~<span class="built_in">A</span>() &#123;&#125;</span><br><span class="line">    </span><br><span class="line">    <span class="function"><span class="keyword">void</span> *<span class="keyword">operator</span> <span class="title">new</span><span class="params">(<span class="keyword">size_t</span> t)</span> </span>= <span class="keyword">delete</span>;  	<span class="comment">// 注意函数的第一个参数和返回值都是固定的</span></span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="keyword">operator</span> <span class="title">delete</span><span class="params">(<span class="keyword">void</span> *ptr)</span> </span>= <span class="keyword">delete</span>; 	<span class="comment">// 重载了 new 就需要重载 delete</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
 
+
+
+
+
+<h4 id="malloc的底层实现"><a href="#malloc的底层实现" class="headerlink" title="malloc的底层实现"></a>malloc的底层实现</h4><p>先简单说一说，malloc底层是使用了brk和mmap系统调用。</p>
+<p>brk系统调用是通过进程向内核申请一个小数据堆，使得进程地址空间内堆空间扩展，然后再通过mmap系统调用创建一个新的线性地址区间。</p>
+<p>malloc是在堆上进行内存分配的函数。进程可以通过<strong>增加堆的大小来分配内存，堆是一段长度可变的连续虚拟内存，始于进程的未初始化数据段末尾，随着内存的分配和释放而增减（见下图)。通常将堆的当前内存边界称为“program break”。</strong></p>
+<ul>
+<li><p>brk：</p>
+<p>改变堆的大小（即分配或释放内存），其实就是命令内核改变进程的program break位置。最初，program break正好位于未初始化数据段末尾之后（如下图所示，与&amp;end位置相同）。</p>
+<p>在program break的位置抬升后，<strong>程序可以访问新分配区域内的任何内存地址，而此时物理内存页尚未分配。内核会在进程首次试图访问这些虚拟内存地址时自动分配新的物理内存页。</strong></p>
+<p>（实际上就是将堆的头指针往高地址延伸，从而能够获得新的虚拟地址）</p>
+<img src="/posts/3e94d9ed/brk.jpg" class title="brk"></li>
+<li><p>mmap： 创建一个新的线性地址区间，如果两个地址区间访问权限相同，那么会合并为一个区间。</p>
+</li>
+</ul>
+<p>Malloc在申请内存时，一般会通过brk或者mmap系统调用进行申请。其中当申请内存小于128K时，会使用系统函数brk在堆区中分配；而当申请内存大于128K时，会使用系统函数mmap在映射区分配。</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li><p>《C陷阱与缺陷》</p>
+</li>
+<li><p>《程序员的自我修养——链接、装载与库》</p>
+</li>
+<li><p>《Linux内核设计与实现》</p>
+</li>
+<li><p><a target="_blank" rel="noopener" href="https://www.zhihu.com/question/21098367">知乎回答：brk和sbrk所指的program break到底是什么？</a></p>
+</li>
+</ul>
 
       
     </div>
@@ -904,7 +932,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">程序编译过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%88%86%E5%8C%BA"><span class="nav-number">2.</span> <span class="nav-text">内存分区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">编译器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%8D%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.1.</span> <span class="nav-text">词法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.2.</span> <span class="nav-text">语法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90"><span class="nav-number">3.3.</span> <span class="nav-text">语义分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96"><span class="nav-number">3.4.</span> <span class="nav-text">源代码优化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%AE%E6%A0%87%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90%E4%B8%8E%E4%BC%98%E5%8C%96"><span class="nav-number">3.5.</span> <span class="nav-text">目标代码生成与优化</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">链接器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%88%86%E7%B1%BB"><span class="nav-number">4.1.</span> <span class="nav-text">链接分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5%E5%99%A8%E7%9A%84%E5%B7%A5%E4%BD%9C"><span class="nav-number">4.2.</span> <span class="nav-text">静态链接器的工作</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A9%BA%E9%97%B4%E4%B8%8E%E5%9C%B0%E5%9D%80%E5%88%86%E9%85%8D"><span class="nav-number">4.3.</span> <span class="nav-text">空间与地址分配</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%AC%A6%E5%8F%B7%E8%A7%A3%E6%9E%90%E4%B8%8E%E9%87%8D%E5%AE%9A%E4%BD%8D"><span class="nav-number">4.4.</span> <span class="nav-text">符号解析与重定位</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A0%86%E5%92%8C%E6%A0%88"><span class="nav-number">5.</span> <span class="nav-text">堆和栈</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A0%86%E5%92%8C%E6%A0%88%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">5.1.</span> <span class="nav-text">堆和栈的区别</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AF%B9%E8%B1%A1%E5%88%9B%E5%BB%BA%E9%99%90%E5%88%B6%E5%9C%A8%E5%A0%86%E6%88%96%E6%A0%88%E4%B8%8A"><span class="nav-number">5.2.</span> <span class="nav-text">对象创建限制在堆或栈上</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">程序编译过程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E5%88%86%E5%8C%BA"><span class="nav-number">2.</span> <span class="nav-text">内存分区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">编译器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%8D%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.1.</span> <span class="nav-text">词法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90"><span class="nav-number">3.2.</span> <span class="nav-text">语法分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%AD%E4%B9%89%E5%88%86%E6%9E%90"><span class="nav-number">3.3.</span> <span class="nav-text">语义分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%BA%90%E4%BB%A3%E7%A0%81%E4%BC%98%E5%8C%96"><span class="nav-number">3.4.</span> <span class="nav-text">源代码优化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%AE%E6%A0%87%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90%E4%B8%8E%E4%BC%98%E5%8C%96"><span class="nav-number">3.5.</span> <span class="nav-text">目标代码生成与优化</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%99%A8%E5%81%9A%E4%BA%86%E4%BB%80%E4%B9%88"><span class="nav-number">4.</span> <span class="nav-text">链接器做了什么</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E5%88%86%E7%B1%BB"><span class="nav-number">4.1.</span> <span class="nav-text">链接分类</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%9D%99%E6%80%81%E9%93%BE%E6%8E%A5%E5%99%A8%E7%9A%84%E5%B7%A5%E4%BD%9C"><span class="nav-number">4.2.</span> <span class="nav-text">静态链接器的工作</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A9%BA%E9%97%B4%E4%B8%8E%E5%9C%B0%E5%9D%80%E5%88%86%E9%85%8D"><span class="nav-number">4.3.</span> <span class="nav-text">空间与地址分配</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%AC%A6%E5%8F%B7%E8%A7%A3%E6%9E%90%E4%B8%8E%E9%87%8D%E5%AE%9A%E4%BD%8D"><span class="nav-number">4.4.</span> <span class="nav-text">符号解析与重定位</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A0%86%E5%92%8C%E6%A0%88"><span class="nav-number">5.</span> <span class="nav-text">堆和栈</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A0%86%E5%92%8C%E6%A0%88%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">5.1.</span> <span class="nav-text">堆和栈的区别</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AF%B9%E8%B1%A1%E5%88%9B%E5%BB%BA%E9%99%90%E5%88%B6%E5%9C%A8%E5%A0%86%E6%88%96%E6%A0%88%E4%B8%8A"><span class="nav-number">5.2.</span> <span class="nav-text">对象创建限制在堆或栈上</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#malloc%E7%9A%84%E5%BA%95%E5%B1%82%E5%AE%9E%E7%8E%B0"><span class="nav-number">5.3.</span> <span class="nav-text">malloc的底层实现</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">6.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
             
 
           </div>
@@ -938,7 +966,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">24.2k</span>
+    <span title="Site words total count">24.7k</span>
   
 </div>
 <!--
