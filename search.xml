@@ -251,6 +251,14 @@
 
 
 
+<h3 id="解题模板"><a href="#解题模板" class="headerlink" title="解题模板"></a>解题模板</h3><p>单调栈，就是栈内元素都是单调呈现的，如果新加入的节点不符合单调性的话，则将栈内的节点弹出，直到最后形成单调区间。</p>
+<h4 id="496-下一个更大元素-I"><a href="#496-下一个更大元素-I" class="headerlink" title="496. 下一个更大元素 I"></a><a href="https://leetcode-cn.com/problems/next-greater-element-i/">496. 下一个更大元素 I</a></h4><p>首先来看下这道题目。这类题目是使用单调栈的最常使用情况——下一个更大/小问题。</p>
+<p>我们可以将数组抽象成正在排队的人，下一个更大的元素就是往后看看到的比自己高的第一个人。</p>
+<p>这样的话可以通过题目，写出代码。</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function">vector&lt;<span class="keyword">int</span>&gt; <span class="title">nextGreaterElement</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt;&amp; nums)</span></span>&#123;</span><br><span class="line">    <span class="function">vector&lt;<span class="keyword">int</span>&gt; <span class="title">ans</span><span class="params">(num.size())</span></span>;</span><br><span class="line">    stack&lt;<span class="keyword">int</span>&gt; s;</span><br><span class="line">    <span class="keyword">for</span>(<span class="keyword">int</span> i=nums.<span class="built_in">size</span>()<span class="number">-1</span>; i&gt;=<span class="number">0</span>; --i)&#123;</span><br><span class="line">        <span class="keyword">while</span>(!s.<span class="built_in">empty</span>() &amp;&amp; s.<span class="built_in">top</span>() &lt;= nums[i])&#123;</span><br><span class="line">            s.<span class="built_in">pop</span>();</span><br><span class="line">        &#125;</span><br><span class="line">        ans[i] = s.<span class="built_in">empty</span>() ? <span class="number">-1</span> : s.<span class="built_in">top</span>();</span><br><span class="line">        s.<span class="built_in">push</span>(nums[i]);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> ans;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这就是单调队列解决问题的模板。由于是找下一个最大的，然后用的又是栈，因此for循环要从后往前扫描元素，倒着入栈，正着出栈。</p>
+<h4 id="503-下一个更大元素-II"><a href="#503-下一个更大元素-II" class="headerlink" title="503. 下一个更大元素 II"></a><a href="https://leetcode-cn.com/problems/next-greater-element-ii/">503. 下一个更大元素 II</a></h4><p>这个题目是延伸：处理循环数组——倍增数组。</p>
 ]]></content>
       <categories>
         <category>算法</category>
