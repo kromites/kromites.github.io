@@ -28,6 +28,62 @@
       </tags>
   </entry>
   <entry>
+    <title>STL介绍</title>
+    <url>/posts/171e944c/</url>
+    <content><![CDATA[<blockquote>
+<p>STL向来是C++中的一个重要组成部分。STL是一个包罗算法与数据结构的软件框架，本篇文章用于为STL做一个简要介绍，至于具体的内容看STL分类的后续文章。</p>
+</blockquote>
+<h3 id="基本组成"><a href="#基本组成" class="headerlink" title="基本组成"></a>基本组成</h3><p>STL有六大组件，彼此可以组合套用：</p>
+<ul>
+<li><p>容器：各种数据结构</p>
+<ul>
+<li>顺序容器： vector, list, deque</li>
+<li>关联容器： set, map</li>
+</ul>
+</li>
+<li><p>算法：各种模板算法（template function: 在各种容器都有适配性）</p>
+<ul>
+<li><code>#include &lt;algorithm&gt;</code>: sort, search, copy, erase等</li>
+</ul>
+</li>
+<li><p>迭代器：本质是<strong>泛型指针</strong>，算法与容器之间的胶合剂。</p>
+<ul>
+<li>共有五种类型：（之后待补充）</li>
+<li>实际上是将一些operator进行重载的class template</li>
+<li>所有STL容器都有自己专属的迭代器。</li>
+<li>原生指针也是一种迭代器</li>
+</ul>
+</li>
+<li><p>仿函数：行为类似函数，可作为算法的某种策略</p>
+<ul>
+<li>可以被视为一种重载了operator()的class 或 class template</li>
+<li>一般的函数指针为狭义的仿函数</li>
+</ul>
+</li>
+<li><p>配接器：一种用来修饰容器或仿函数或迭代器接口的东西。比如stack和queue，因为它们的底层是由deque实现的，所有操作也都是deque操作。</p>
+<ul>
+<li>改变functor接口者，称为function adapter</li>
+<li>改变container接口者，称为container adapter</li>
+<li>改变iterator接口者，称为iterator adapter</li>
+</ul>
+</li>
+<li><p>配置器：负责空间配置与管理</p>
+<ul>
+<li>从实现角度来看，配置器是实现了动态空间配置、空间管理、空间释放的class template</li>
+</ul>
+</li>
+</ul>
+<p>六大主件之间的关系：</p>
+<p>​    Container通过Allocator取得数据储存空间，Algorithm通过Iterator存取Container内容，Functor可以协助Algorithm完成不同策略变化，Adapter可以修饰或套接Functor。</p>
+]]></content>
+      <categories>
+        <category>C++</category>
+      </categories>
+      <tags>
+        <tag>STL</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>编译内存相关</title>
     <url>/posts/3e94d9ed/</url>
     <content><![CDATA[<blockquote>
