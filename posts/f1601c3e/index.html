@@ -112,7 +112,7 @@
 
 
 
-  <meta name="keywords" content="博客," />
+  <meta name="keywords" content="单例模式," />
 
 
 
@@ -123,17 +123,17 @@
 
 
 
-<meta name="description" content="欢迎您访问此博客！ 点开阅读全文可了解到博客的基本信息">
+<meta name="description" content="本篇文章来介绍线程安全的单例模式怎么写。不仅有传统意义的DLC单例和静态成员变量的单例，还有着C++11的pthread_once如何实现单例模式。">
 <meta property="og:type" content="article">
-<meta property="og:title" content="博客介绍">
-<meta property="og:url" content="http://kromites.github.io/posts/e627a59/index.html">
+<meta property="og:title" content="单例模式">
+<meta property="og:url" content="http://kromites.github.io/posts/f1601c3e/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="欢迎您访问此博客！ 点开阅读全文可了解到博客的基本信息">
+<meta property="og:description" content="本篇文章来介绍线程安全的单例模式怎么写。不仅有传统意义的DLC单例和静态成员变量的单例，还有着C++11的pthread_once如何实现单例模式。">
 <meta property="og:locale">
-<meta property="article:published_time" content="2021-07-02T04:25:21.000Z">
-<meta property="article:modified_time" content="2021-07-02T04:36:46.864Z">
+<meta property="article:published_time" content="2021-07-12T09:17:54.000Z">
+<meta property="article:modified_time" content="2021-07-12T12:09:26.133Z">
 <meta property="article:author" content="Kromite">
-<meta property="article:tag" content="博客">
+<meta property="article:tag" content="单例模式">
 <meta name="twitter:card" content="summary">
 
 
@@ -164,13 +164,13 @@
 
 
 
-  <link rel="canonical" href="http://kromites.github.io/posts/e627a59/"/>
+  <link rel="canonical" href="http://kromites.github.io/posts/f1601c3e/"/>
 
 
 
 
 
-  <title>博客介绍 | Kromite</title>
+  <title>单例模式 | Kromite</title>
   
 
 
@@ -341,7 +341,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/e627a59/">
+    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/f1601c3e/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="name" content="">
@@ -358,15 +358,11 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">博客介绍</h1>
+          <h1 class="post-title" itemprop="name headline">单例模式</h1>
         
 
         <div class="post-meta">
           <span class="post-time">
-          
-            <i class="fa fa-thumb-tack"></i>
-            <font color=7D26CD>置顶</font>
-            <span class="post-meta-divider">|</span>
           
             
               <span class="post-meta-item-icon">
@@ -375,8 +371,8 @@
               
                 <span class="post-meta-item-text">发表于</span>
               
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-02T12:25:21+08:00">
-                2021-07-02
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-12T17:17:54+08:00">
+                2021-07-12
               </time>
             
 
@@ -398,8 +394,8 @@
               
               
                 <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E9%9D%9E%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index">
-                    <span itemprop="name">非技术</span>
+                  <a href="/categories/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/" itemprop="url" rel="index">
+                    <span itemprop="name">设计模式</span>
                   </a>
                 </span>
 
@@ -416,8 +412,8 @@
                 <span class="post-meta-item-icon">
                   <i class="fa fa-comment-o"></i>
                 </span>
-                <a href="/posts/e627a59/#comments" itemprop="discussionUrl">
-                  <span class="post-comments-count valine-comment-count" data-xid="/posts/e627a59/" itemprop="commentCount"></span>
+                <a href="/posts/f1601c3e/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/posts/f1601c3e/" itemprop="commentCount"></span>
                 </a>
               </span>
             
@@ -439,7 +435,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  140
+                  990
                 </span>
               
 
@@ -455,7 +451,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  1
+                  4
                 </span>
               
             </div>
@@ -477,21 +473,28 @@
 
       
         <blockquote>
-<p>欢迎您访问此博客！ 点开阅读全文可了解到博客的基本信息</p>
+<p>本篇文章来介绍线程安全的单例模式怎么写。不仅有传统意义的DLC单例和静态成员变量的单例，还有着C++11的pthread_once如何实现单例模式。</p>
 </blockquote>
 <span id="more"></span>
 
-<p>本博客创建于2021.7.1。作为一名22届毕业的学生，目前的主要精力放在找工作上，因此最近上传的大部分是自己的学习笔记。笔记内容涉及到以下几个主要方面：</p>
-<ul>
-<li>数据结构与算法</li>
-<li>计算机网络</li>
-<li>操作系统</li>
-<li>网络编程</li>
-<li>数据库</li>
-<li>项目心得</li>
-</ul>
-<p>希望自己能够在这个夏天拿到心满意足的Offer！</p>
-<p>TO BE CONTINUE~</p>
+<h4 id="传统的单例模式："><a href="#传统的单例模式：" class="headerlink" title="传统的单例模式："></a>传统的单例模式：</h4><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 1：  在该空间中针对该对象只能创建一个instance，因此该对象的构造函数必须delete。</span></span><br><span class="line"><span class="comment">			那么如何创建那个实例呢？直接用static关键词修饰这个实例，如果该实例已经被创建了，</span></span><br><span class="line"><span class="comment">			那这个实例就一直存在。</span></span><br><span class="line"><span class="comment">			但是多线程中，这个创建过程是安全的吗？</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">		<span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">			value_ = <span class="keyword">new</span> <span class="built_in">T</span>();</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> value_;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">static</span> T* value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> T* value_ = <span class="literal">nullptr</span>; <span class="comment">// static对象初始化</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="加上锁的单例模式："><a href="#加上锁的单例模式：" class="headerlink" title="加上锁的单例模式："></a>加上锁的单例模式：</h4><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 2：  在上面的代码加上锁，那么就可以解决多线程下的condition race问题，</span></span><br><span class="line"><span class="comment">			但是每次访问它都要进行加锁，锁也是一种资源，这样会大量耗费资源。</span></span><br><span class="line"><span class="comment">			因此这样性能消耗很大，不提倡。</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 获取锁</span></span><br><span class="line">       	Lock lock;</span><br><span class="line">        </span><br><span class="line">		<span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">			value_ = <span class="keyword">new</span> <span class="built_in">T</span>();</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> value_;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">static</span> T* value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> T* value_ = <span class="literal">nullptr</span>; <span class="comment">// static对象初始化</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="double-checked-locking的单例模式"><a href="#double-checked-locking的单例模式" class="headerlink" title="double checked locking的单例模式"></a>double checked locking的单例模式</h4><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 3：  2的性能消耗大的原因是加锁，那么如何让其性能提升呢？</span></span><br><span class="line"><span class="comment">			再通过一次判断，如果满足的话，加锁，不然的话，就不加。	</span></span><br><span class="line"><span class="comment">			因此double checked locking 是为了减少竞争和加锁载荷。</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 二次确认</span></span><br><span class="line">        <span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>)&#123;</span><br><span class="line">            <span class="comment">// 获取锁</span></span><br><span class="line">            Lock lock;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">                value_ = <span class="keyword">new</span> <span class="built_in">T</span>();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">		<span class="keyword">return</span> value_;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">static</span> T* value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> T* value_ = <span class="literal">nullptr</span>; <span class="comment">// static对象初始化</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="静态局部变量实现单例（C-11"><a href="#静态局部变量实现单例（C-11" class="headerlink" title="静态局部变量实现单例（C++11)"></a>静态局部变量实现单例（C++11)</h4><p>​    上面的单例模式真的对嘛？由于编译器的指令重排，上面的单例模式或多或少都有点问题。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 4：  new函数分为三步：</span></span><br><span class="line"><span class="comment">                    1：分配空间： 调用 operator new 来实现。（底层是用malloc）</span></span><br><span class="line"><span class="comment">                    2：在分配空间中构造对象：调用构造函数实现 placement new</span></span><br><span class="line"><span class="comment">                    2：使得实例value_指向分配的空间。</span></span><br><span class="line"><span class="comment">             由于编译器有指令优化，因此这三个步骤不是严格按照顺序执行的。</span></span><br><span class="line"><span class="comment">             所以可能出现线程A进入了临界区，执行了step1和step3，然后挂起。</span></span><br><span class="line"><span class="comment">             这个时候指针已经指向了一个分配空间，但是分配空间中没有构造对象。(即指针不为nullptr，但是内存里面还是空的)</span></span><br><span class="line"><span class="comment">             这个时候B进入临界区，发现value_ != nullptr,直接出错</span></span><br><span class="line"><span class="comment">             </span></span><br><span class="line"><span class="comment">             总之就是指令重排会导致DLC方式的单例不好写。</span></span><br><span class="line"><span class="comment">             </span></span><br><span class="line"><span class="comment">             因此这里有个使用局部静态变量实现的单例模式——————Meyers Singleton</span></span><br><span class="line"><span class="comment">				局部静态变量智慧初始化一次，因此这个调用这个instance调用的永远是这个value</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">static</span> T value;	<span class="comment">// 局部静态变量</span></span><br><span class="line">        </span><br><span class="line">		<span class="keyword">return</span> value;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="C-11的call-once实现单例模式"><a href="#C-11的call-once实现单例模式" class="headerlink" title="C++11的call_once实现单例模式"></a>C++11的call_once实现单例模式</h4><p>​    在多线程编程中，有时某个任务只需要执行一次，此时可以用C++11中的<code>std::call_once</code>函数配合<code>std::once_flag</code>来实现。如果多个线程需要同时调用某个函数，<code>std::call_once</code>可以保证多个线程对该函数只调用一次。也可用在解决线程安全的单例模式。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;mutex&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">template</span>&lt;class Callable, class... Args &gt;</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">call_once</span><span class="params">(std::once_flag&amp; flag, Callable&amp;&amp; f, Args&amp;&amp;... args )</span></span>;</span><br></pre></td></tr></table></figure>
+
+
+
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;mutex&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">  <span class="function"><span class="keyword">static</span> Singleton&amp; <span class="title">GetInstance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">static</span> std::once_flag s_flag;</span><br><span class="line">    std::<span class="built_in">call_once</span>(s_flag, [&amp;]() &#123;</span><br><span class="line">      instance_.<span class="built_in">reset</span>(<span class="keyword">new</span> Singleton);</span><br><span class="line">    &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> *instance_;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  ~<span class="built_in">Singleton</span>() = <span class="keyword">default</span>;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">  <span class="built_in">Singleton</span>() = <span class="keyword">default</span>;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">Singleton</span>(<span class="keyword">const</span> Singleton&amp;) = <span class="keyword">delete</span>;</span><br><span class="line">  Singleton&amp; <span class="keyword">operator</span>=(<span class="keyword">const</span> Singleton&amp;) = <span class="keyword">delete</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">  <span class="keyword">static</span> std::unique_ptr&lt;Singleton&gt; instance_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">std::unique_ptr&lt;Singleton&gt; Singleton::instance_;</span><br></pre></td></tr></table></figure>
+
 
       
     </div>
@@ -518,7 +521,7 @@
       
         <div class="post-tags">
           
-            <a href="/tags/%E5%8D%9A%E5%AE%A2/" rel="tag"><i class="fa fa-tag"></i> 博客</a>
+            <a href="/tags/%E5%8D%95%E4%BE%8B%E6%A8%A1%E5%BC%8F/" rel="tag"><i class="fa fa-tag"></i> 单例模式</a>
           
         </div>
       
@@ -546,8 +549,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/posts/735e5788/" rel="next" title="排序算法">
-                <i class="fa fa-chevron-left"></i> 排序算法
+              <a href="/posts/171e944c/" rel="next" title="STL介绍">
+                <i class="fa fa-chevron-left"></i> STL介绍
               </a>
             
           </div>
@@ -556,8 +559,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/posts/7ce262fd/" rel="prev" title="I/O多路复用">
-                I/O多路复用 <i class="fa fa-chevron-right"></i>
+              <a href="/posts/1cc2fcbf/" rel="prev" title="STL空间配置器">
+                STL空间配置器 <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -613,8 +616,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+      <section class="site-overview-wrap sidebar-panel">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
             
@@ -730,6 +742,22 @@
         </div>
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BC%A0%E7%BB%9F%E7%9A%84%E5%8D%95%E4%BE%8B%E6%A8%A1%E5%BC%8F%EF%BC%9A"><span class="nav-number">1.</span> <span class="nav-text">传统的单例模式：</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8A%A0%E4%B8%8A%E9%94%81%E7%9A%84%E5%8D%95%E4%BE%8B%E6%A8%A1%E5%BC%8F%EF%BC%9A"><span class="nav-number">2.</span> <span class="nav-text">加上锁的单例模式：</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#double-checked-locking%E7%9A%84%E5%8D%95%E4%BE%8B%E6%A8%A1%E5%BC%8F"><span class="nav-number">3.</span> <span class="nav-text">double checked locking的单例模式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%9D%99%E6%80%81%E5%B1%80%E9%83%A8%E5%8F%98%E9%87%8F%E5%AE%9E%E7%8E%B0%E5%8D%95%E4%BE%8B%EF%BC%88C-11"><span class="nav-number">4.</span> <span class="nav-text">静态局部变量实现单例（C++11)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#C-11%E7%9A%84call-once%E5%AE%9E%E7%8E%B0%E5%8D%95%E4%BE%8B%E6%A8%A1%E5%BC%8F"><span class="nav-number">5.</span> <span class="nav-text">C++11的call_once实现单例模式</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       

@@ -28,6 +28,127 @@
       </tags>
   </entry>
   <entry>
+    <title>STL空间配置器</title>
+    <url>/posts/1cc2fcbf/</url>
+    <content><![CDATA[<blockquote>
+<p>本篇文章简单记录一下STL中的空间配置器(allocator)</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h4 id="空间配置"><a href="#空间配置" class="headerlink" title="空间配置"></a>空间配置</h4><p>​    STL中的空间配置器是实现STL的第一个部件，因为整个STL的操作对象都放在容器中，而容器一定需要配置空间。如果没有了解到STL的空间配置原理的话，在之后学习STL其它组件时会遇到困难。</p>
+<p>​    而为什么叫空间配置器而非常见的内存配置器呢？因为这个空间不一定是内存，你也可以写个allocator直接像硬盘中取空间。不过在SGI STL中提供的配置器，配置对象是内存。</p>
+<p>​    内存空间的配置和释放在C++语法部分就已经了解到，是通过<code>::operator new</code>和<code>::operator delete</code>来实现的。 这两者通过调用malloc/free来对内存进行操作。这里不再赘述。</p>
+<h4 id="SGI中的std-allocator"><a href="#SGI中的std-allocator" class="headerlink" title="SGI中的std::allocator"></a>SGI中的<code>std::allocator</code></h4><p>​    SGI标准的空间配置器为<code>std::allocator</code>，该配置器只是把C++中的<code>::operator new</code>和<code>::operator delete</code>做了一层薄薄的包装而已。这样的话<strong>效率不高</strong>，因此不建议使用。</p>
+<h4 id="SGI中的std-alloc"><a href="#SGI中的std-alloc" class="headerlink" title="SGI中的std::alloc"></a>SGI中的<code>std::alloc</code></h4><h5 id="alloc介绍"><a href="#alloc介绍" class="headerlink" title="alloc介绍"></a><code>alloc</code>介绍</h5><p>​    由于标准的空间配置器<code>std::allocator</code>不管用，那么SGI又实现了另外一个空间配置器<code>std::alloc</code>。</p>
+<p>​    众所周知，C++内存配置和释放操作一般如下所示：</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Foo</span> &#123;</span> ... &#125;;</span><br><span class="line">Foo* pf = <span class="keyword">new</span> Foo;</span><br><span class="line"><span class="keyword">delete</span> pf;</span><br></pre></td></tr></table></figure>
+
+<p>其中new算式内含有两个操作：</p>
+<ol>
+<li>调用<code>::operator new</code>配置内存；</li>
+<li>调用<code>Foo::Foo()</code>构造对象。</li>
+</ol>
+<p>而delete算式内含有两个操作</p>
+<ol>
+<li>调用<code>Foo:~Foo()</code>析构对象；</li>
+<li>调用<code>::operator delete</code>释放内存。</li>
+</ol>
+<p>因此该配置器将两阶段操作区分开来。内存配置操作由<code>alloc::allocate()</code>负责，对象构造由<code>alloc::construct()</code>负责，内存释放操作同理。</p>
+<p>配置器定义域<code>&lt;memory&gt;</code>之内</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">// in &lt;memory&gt; </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stl_alloc.h&gt;</span>					<span class="comment">// 负责内存空间的配置与释放</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stl_construct.h&gt;</span>				<span class="comment">// 负责对象内容的构造与析构</span></span></span><br></pre></td></tr></table></figure>
+
+
+
+<h5 id="alloc对象构造和析构工具"><a href="#alloc对象构造和析构工具" class="headerlink" title="alloc对象构造和析构工具"></a><code>alloc</code>对象构造和析构工具</h5><p><code>alloc</code>中的构造和析构工具是使用<code>::placement new</code>和<code>::placement delete</code>，然后使用模板编程进行<code>type_traits</code>来对特定元素进行构造和析构。</p>
+<h5 id="alloc内存配置和释放工具"><a href="#alloc内存配置和释放工具" class="headerlink" title="alloc内存配置和释放工具"></a><code>alloc</code>内存配置和释放工具</h5><p>这个才是有意思的地方：<code>alloc</code>没有像之前的<code>std::allocator</code>一样只是对<code>operator new</code>进行一层薄薄的封装，而是通过<strong>双层级配置器</strong>来提升效率。</p>
+<ul>
+<li>第一级配置器：<ul>
+<li>使用情况：<strong>当配置区块大于128bytes时</strong>，使用它</li>
+<li>使用方法：直接使用malloc和free</li>
+</ul>
+</li>
+<li>第二级配置器：<ul>
+<li>使用情况：当配置区块小于128bytes时，使用它</li>
+<li>使用方法：使用复杂的<strong>内存池整理</strong>方式</li>
+</ul>
+</li>
+</ul>
+<p>第一级配置器无须赘言，直接看第二级配置器吧</p>
+<ul>
+<li><p>为什么要进行二级配置？</p>
+<ul>
+<li>为了避免出现太多小额区块造成内存的碎片。小额区块带来的不仅仅是内存碎片，还会带来额外的管理负担。</li>
+<li>这样的话，对于小额区块的利用是有价值的。</li>
+</ul>
+</li>
+<li><p>二级配置原理</p>
+<ul>
+<li><p><strong>使用内存池管理：每次配置一大块内存，并维护对应的自由链表。</strong></p>
+</li>
+<li><p>自由链表一般是8的倍数，因此一般配置16个自由链表，分别配置8~128bytes</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 自由链表 free-lists的节点结果如下</span></span><br><span class="line"><span class="class"><span class="keyword">union</span> <span class="title">obj</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> <span class="title">obj</span> * <span class="title">free_list_link</span>;</span></span><br><span class="line">    <span class="keyword">char</span> client_data[<span class="number">1</span>];				</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>使用union结构，obj指针不会造成内存浪费。</p>
+</li>
+<li><p>配置内存时与自由链表空间进行匹配，匹配成功则将该链表的内存空间配置出去，当回收内存时，这块内存区域又会回收到自由链表中。</p>
+</li>
+</ul>
+</li>
+<li><p>函数调用</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span>* <span class="title">allocate</span><span class="params">(<span class="keyword">size_t</span> n)</span></span>&#123;</span><br><span class="line">    obj* <span class="keyword">volatile</span> * my_free_list;</span><br><span class="line">    obj * result;</span><br><span class="line">    <span class="keyword">if</span>(n &gt; <span class="keyword">size_t</span> __MAX_NYTES)&#123;</span><br><span class="line">        <span class="keyword">return</span> (malloc_alloc::<span class="built_in">allocate</span>(n));</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 寻找16个free lists中适当的一个</span></span><br><span class="line">    my_free_list = free_list + <span class="built_in">FREELIST_INDEX</span>(n);</span><br><span class="line">    result = *my_free_list;</span><br><span class="line">    <span class="keyword">if</span>(result == <span class="number">0</span>)&#123;</span><br><span class="line">        <span class="comment">// 如果没有合适的自由链表，则重新填充free_list</span></span><br><span class="line">        <span class="keyword">void</span> *r = <span class="built_in">refill</span>(<span class="built_in">ROUND_UP</span>(n));</span><br><span class="line">        <span class="keyword">return</span> r;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// 调整free list</span></span><br><span class="line">    *my_free_list = result-&gt;free-&gt;list-&gt;link;</span><br><span class="line">    <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> <span class="title">dellocate</span><span class="params">(<span class="keyword">void</span>* p,<span class="keyword">size_t</span> n)</span></span>&#123;</span><br><span class="line">    obj* <span class="keyword">volatile</span> * my_free_list;</span><br><span class="line">    obj * q = (obj *) p;</span><br><span class="line">    <span class="keyword">if</span>(n &gt; <span class="keyword">size_t</span> __MAX_NYTES)&#123;</span><br><span class="line">        malloc_alloc::<span class="built_in">dellocate</span>(p,n);</span><br><span class="line">        <span class="keyword">return</span> ;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 寻找对应的free list</span></span><br><span class="line">    my_free_list = free_list + <span class="built_in">FREELIST_INDEX</span>(n);</span><br><span class="line">  </span><br><span class="line">    <span class="comment">// 调整free list，回收区块</span></span><br><span class="line">    q-&gt;free-&gt;list-&gt;link = *my_free_list;</span><br><span class="line">    *my_free_list = q;</span><br><span class="line">    <span class="keyword">return</span> ;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果free_list中没有可以区块时，就调用refill()，准备为free_list重新填充空间。新的空间将取自内存池（经由<code>chunk_alloc()</code>完成）</p>
+</li>
+</ul>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>​    STL的空间配置并不难，但是提前了解的话，对于后面容器创建的行为都会很好地理解了。</p>
+<h4 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h4><ul>
+<li>《STL源码剖析》——侯捷</li>
+</ul>
+]]></content>
+      <categories>
+        <category>STL</category>
+      </categories>
+      <tags>
+        <tag>allocator</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>单例模式</title>
+    <url>/posts/f1601c3e/</url>
+    <content><![CDATA[<blockquote>
+<p>本篇文章来介绍线程安全的单例模式怎么写。不仅有传统意义的DLC单例和静态成员变量的单例，还有着C++11的pthread_once如何实现单例模式。</p>
+</blockquote>
+<span id="more"></span>
+
+<h4 id="传统的单例模式："><a href="#传统的单例模式：" class="headerlink" title="传统的单例模式："></a>传统的单例模式：</h4><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 1：  在该空间中针对该对象只能创建一个instance，因此该对象的构造函数必须delete。</span></span><br><span class="line"><span class="comment">			那么如何创建那个实例呢？直接用static关键词修饰这个实例，如果该实例已经被创建了，</span></span><br><span class="line"><span class="comment">			那这个实例就一直存在。</span></span><br><span class="line"><span class="comment">			但是多线程中，这个创建过程是安全的吗？</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">		<span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">			value_ = <span class="keyword">new</span> <span class="built_in">T</span>();</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> value_;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">static</span> T* value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> T* value_ = <span class="literal">nullptr</span>; <span class="comment">// static对象初始化</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="加上锁的单例模式："><a href="#加上锁的单例模式：" class="headerlink" title="加上锁的单例模式："></a>加上锁的单例模式：</h4><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 2：  在上面的代码加上锁，那么就可以解决多线程下的condition race问题，</span></span><br><span class="line"><span class="comment">			但是每次访问它都要进行加锁，锁也是一种资源，这样会大量耗费资源。</span></span><br><span class="line"><span class="comment">			因此这样性能消耗很大，不提倡。</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 获取锁</span></span><br><span class="line">       	Lock lock;</span><br><span class="line">        </span><br><span class="line">		<span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">			value_ = <span class="keyword">new</span> <span class="built_in">T</span>();</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> value_;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">static</span> T* value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> T* value_ = <span class="literal">nullptr</span>; <span class="comment">// static对象初始化</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="double-checked-locking的单例模式"><a href="#double-checked-locking的单例模式" class="headerlink" title="double checked locking的单例模式"></a>double checked locking的单例模式</h4><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 3：  2的性能消耗大的原因是加锁，那么如何让其性能提升呢？</span></span><br><span class="line"><span class="comment">			再通过一次判断，如果满足的话，加锁，不然的话，就不加。	</span></span><br><span class="line"><span class="comment">			因此double checked locking 是为了减少竞争和加锁载荷。</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="comment">// 二次确认</span></span><br><span class="line">        <span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>)&#123;</span><br><span class="line">            <span class="comment">// 获取锁</span></span><br><span class="line">            Lock lock;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">if</span>(value_ == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">                value_ = <span class="keyword">new</span> <span class="built_in">T</span>();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">		<span class="keyword">return</span> value_;</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	<span class="keyword">static</span> T* value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> T* value_ = <span class="literal">nullptr</span>; <span class="comment">// static对象初始化</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="静态局部变量实现单例（C-11"><a href="#静态局部变量实现单例（C-11" class="headerlink" title="静态局部变量实现单例（C++11)"></a>静态局部变量实现单例（C++11)</h4><p>​    上面的单例模式真的对嘛？由于编译器的指令重排，上面的单例模式或多或少都有点问题。</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">/****************************************************************************</span></span><br><span class="line"><span class="comment">* 单例模式 4：  new函数分为三步：</span></span><br><span class="line"><span class="comment">                    1：分配空间： 调用 operator new 来实现。（底层是用malloc）</span></span><br><span class="line"><span class="comment">                    2：在分配空间中构造对象：调用构造函数实现 placement new</span></span><br><span class="line"><span class="comment">                    2：使得实例value_指向分配的空间。</span></span><br><span class="line"><span class="comment">             由于编译器有指令优化，因此这三个步骤不是严格按照顺序执行的。</span></span><br><span class="line"><span class="comment">             所以可能出现线程A进入了临界区，执行了step1和step3，然后挂起。</span></span><br><span class="line"><span class="comment">             这个时候指针已经指向了一个分配空间，但是分配空间中没有构造对象。(即指针不为nullptr，但是内存里面还是空的)</span></span><br><span class="line"><span class="comment">             这个时候B进入临界区，发现value_ != nullptr,直接出错</span></span><br><span class="line"><span class="comment">             </span></span><br><span class="line"><span class="comment">             总之就是指令重排会导致DLC方式的单例不好写。</span></span><br><span class="line"><span class="comment">             </span></span><br><span class="line"><span class="comment">             因此这里有个使用局部静态变量实现的单例模式——————Meyers Singleton</span></span><br><span class="line"><span class="comment">				局部静态变量智慧初始化一次，因此这个调用这个instance调用的永远是这个value</span></span><br><span class="line"><span class="comment">******************************************************************************/</span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	~<span class="built_in">Singleton</span>() = <span class="keyword">delete</span>;</span><br><span class="line">	</span><br><span class="line">	<span class="function"><span class="keyword">static</span> T&amp; <span class="title">instance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">static</span> T value;	<span class="comment">// 局部静态变量</span></span><br><span class="line">        </span><br><span class="line">		<span class="keyword">return</span> value;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="C-11的call-once实现单例模式"><a href="#C-11的call-once实现单例模式" class="headerlink" title="C++11的call_once实现单例模式"></a>C++11的call_once实现单例模式</h4><p>​    在多线程编程中，有时某个任务只需要执行一次，此时可以用C++11中的<code>std::call_once</code>函数配合<code>std::once_flag</code>来实现。如果多个线程需要同时调用某个函数，<code>std::call_once</code>可以保证多个线程对该函数只调用一次。也可用在解决线程安全的单例模式。</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;mutex&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">template</span>&lt;class Callable, class... Args &gt;</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">call_once</span><span class="params">(std::once_flag&amp; flag, Callable&amp;&amp; f, Args&amp;&amp;... args )</span></span>;</span><br></pre></td></tr></table></figure>
+
+
+
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;memory&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;mutex&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Singleton</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">  <span class="function"><span class="keyword">static</span> Singleton&amp; <span class="title">GetInstance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">static</span> std::once_flag s_flag;</span><br><span class="line">    std::<span class="built_in">call_once</span>(s_flag, [&amp;]() &#123;</span><br><span class="line">      instance_.<span class="built_in">reset</span>(<span class="keyword">new</span> Singleton);</span><br><span class="line">    &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> *instance_;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  ~<span class="built_in">Singleton</span>() = <span class="keyword">default</span>;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">  <span class="built_in">Singleton</span>() = <span class="keyword">default</span>;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">Singleton</span>(<span class="keyword">const</span> Singleton&amp;) = <span class="keyword">delete</span>;</span><br><span class="line">  Singleton&amp; <span class="keyword">operator</span>=(<span class="keyword">const</span> Singleton&amp;) = <span class="keyword">delete</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">  <span class="keyword">static</span> std::unique_ptr&lt;Singleton&gt; instance_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">std::unique_ptr&lt;Singleton&gt; Singleton::instance_;</span><br></pre></td></tr></table></figure>
+
+]]></content>
+      <categories>
+        <category>设计模式</category>
+      </categories>
+      <tags>
+        <tag>单例模式</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>STL介绍</title>
     <url>/posts/171e944c/</url>
     <content><![CDATA[<blockquote>
@@ -290,11 +411,6 @@
         <tag>编译</tag>
         <tag>内存</tag>
       </tags>
-  </entry>
-  <entry>
-    <title>单调队列</title>
-    <url>/posts/d9f45d1f/</url>
-    <content><![CDATA[]]></content>
   </entry>
   <entry>
     <title>单调栈</title>
