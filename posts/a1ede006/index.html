@@ -112,7 +112,7 @@
 
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="HTTP," />
 
 
 
@@ -123,16 +123,17 @@
 
 
 
-<meta name="description" content="汲取知识">
+<meta name="description" content="本篇文章介绍一下HTTP的基础知识。主要涉及方面有HTTP报文，HTTPS，HTTP2.0的改进等">
 <meta property="og:type" content="article">
 <meta property="og:title" content="HTTP">
 <meta property="og:url" content="http://kromites.github.io/posts/a1ede006/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="汲取知识">
+<meta property="og:description" content="本篇文章介绍一下HTTP的基础知识。主要涉及方面有HTTP报文，HTTPS，HTTP2.0的改进等">
 <meta property="og:locale">
 <meta property="article:published_time" content="2021-07-13T06:41:02.000Z">
-<meta property="article:modified_time" content="2021-07-14T08:40:52.277Z">
+<meta property="article:modified_time" content="2021-07-15T12:37:54.819Z">
 <meta property="article:author" content="Kromite">
+<meta property="article:tag" content="HTTP">
 <meta name="twitter:card" content="summary">
 
 
@@ -381,6 +382,28 @@
           </span>
 
           
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%BD%91%E7%BB%9C/" itemprop="url" rel="index">
+                    <span itemprop="name">计算机网络</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
 
           
             
@@ -412,7 +435,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  0
+                  3.7k
                 </span>
               
 
@@ -428,7 +451,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  1
+                  12
                 </span>
               
             </div>
@@ -449,7 +472,305 @@
       
 
       
-        
+        <blockquote>
+<p>本篇文章介绍一下HTTP的基础知识。主要涉及方面有HTTP报文，HTTPS，HTTP2.0的改进等</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h3 id="HTTP协议介绍"><a href="#HTTP协议介绍" class="headerlink" title="HTTP协议介绍"></a>HTTP协议介绍</h3><h4 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h4><ul>
+<li>HTTP协议叫做超文本传输协议，广泛应用Web间的客户端与服务器之间的通信。现在一般介绍都是HTTP1.1。</li>
+</ul>
+<h4 id="特点"><a href="#特点" class="headerlink" title="特点"></a>特点</h4><ul>
+<li><p>是一个<strong>无状态的协议</strong>，无状态是指自身不对请求和响应的状态进行保存，这样的话协议对发送过的请求和响应都没有记录，不做持久化处理。这样能够使HTTP更简单。</p>
+</li>
+<li><p><strong>使用Cookie技术</strong>，虽然是无状态协议，但是依据可能要保证用户的状态，比如进入一个网页要保持登录状态。使用cookie的话能够很好的管理用户的状态。</p>
+<ul>
+<li>Cookie技术通过在请求和响应报文中写入Cookie信息来控制<strong>客户端</strong>的状态。</li>
+<li><strong>服务器生成响应报文</strong>中的<code>Set-Cookie</code>首部字段，通知<strong>客户端保存Cookie</strong>。</li>
+</ul>
+</li>
+<li><p>使用URI定位互联网上的资源，支持多种方法请求，如GET、POST等，请求方法和URI均在请求报文中的请求行中。</p>
+</li>
+<li><p>采用管线化持久连接： 1.1默认支持管线化和持久连接，这样的话能够减少重复建立和断开锁造成的额外开销，减轻了服务器的负载。管线化指的是可以发送多个请求，不用等待响应再发送，这样请求数多的话，时间差就越明显。</p>
+</li>
+</ul>
+<h3 id="HTTP报文结构"><a href="#HTTP报文结构" class="headerlink" title="HTTP报文结构"></a>HTTP报文结构</h3><h4 id><a href="#" class="headerlink" title></a></h4><p>// todo 图</p>
+<ul>
+<li>请求行：包括请求方法，请求URI和HTTP版本</li>
+<li>状态行：包含状态码，原因短语和HTTP版本</li>
+<li>头部</li>
+<li>报文主体</li>
+</ul>
+<p>HTTP在传输中可以使用<strong>分块传输编码</strong>的方法，能够提升HTTP传输的效率</p>
+<h4 id="请求行"><a href="#请求行" class="headerlink" title="请求行"></a>请求行</h4><figure class="highlight http"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">GET</span> <span class="string">/</span> <span class="meta">HTTP/1.1</span></span><br></pre></td></tr></table></figure>
+
+<p>请求行最重要的就是请求方法，请求方法有以下几种：</p>
+<ul>
+<li>GET：获取URI的资源，请求报文主体为空。</li>
+<li>POST：向指定资源提交数据进行处理请求（例如提交表单或者上传文件）。<strong>数据被包含在请求体中</strong>。可能会导致<strong>新的资源的建立或已有资源的更改。</strong></li>
+<li>PUT：用于传输文件，报文主体是文件内容，保存到指定的URI中</li>
+<li>DELET：删除文件，与PUT相反的操作，一般都不适用</li>
+<li>HEAD：和get类似，无报文主体，只是确认一下URI的有效性，验证通信状态。</li>
+</ul>
+<p>GET和POST的区别：</p>
+<ul>
+<li><p><strong>get 提交的数据会放在 URL 之后，并且请求参数会被完整的保留在浏览器的记录里，由于参数直接暴露在 URL 中，可能会存在安全问题，因此往往用于获取资源信息。而 post 参数放在请求主体中，并且参数不会被保留，相比 get 方法，post 方法更安全，主要用于修改服务器上的资源</strong>。</p>
+</li>
+<li><p><strong>get 请求只支持 URL 编码，post 请求支持多种编码格式。</strong></p>
+</li>
+<li><p><strong>get 只支持 ASCII 字符格式的参数，而 post 方法没有限制。</strong></p>
+</li>
+<li><p>get 提交的数据大小有限制（这里所说的限制是针对浏览器而言的），而 post 方法提交的数据没限制</p>
+</li>
+<li><p>get 方式需要使用 Request.QueryString 来取得变量的值，而 post 方式通过 Request.Form 来获取。</p>
+</li>
+<li><p>get 方法产生一个 TCP 数据包，post 方法产生两个（并不是所有的浏览器中都产生两个）。这个是因为POST首先发header过去，和服务器说之后要来东西了，然后再将主体发过去。</p>
+</li>
+</ul>
+<h4 id="状态行"><a href="#状态行" class="headerlink" title="状态行"></a>状态行</h4><figure class="highlight http"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">HTTP/1.1</span> <span class="number">200</span> OK</span><br></pre></td></tr></table></figure>
+
+<p>状态行主要是告知从服务器端返回的请求结果。</p>
+<p>状态码类别</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>类别</th>
+<th>原因短语</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1XX</td>
+<td>信息性状态码</td>
+<td>接收的请求正在处理</td>
+</tr>
+<tr>
+<td>2XX</td>
+<td>成功状态码</td>
+<td>请求正常处理完毕</td>
+</tr>
+<tr>
+<td>3XX</td>
+<td>重定向状态码</td>
+<td>需要进行附加操作以完成请求</td>
+</tr>
+<tr>
+<td>4XX</td>
+<td>客户端错误状态码</td>
+<td>服务器无法处理请求</td>
+</tr>
+<tr>
+<td>5XX</td>
+<td>服务器错误状态码</td>
+<td>服务器处理请求出错</td>
+</tr>
+</tbody></table>
+<p>重要状态码：</p>
+<ul>
+<li><p>100 继续，服务器正在处理请求</p>
+</li>
+<li><p>200 请求成功</p>
+</li>
+<li><p>204 请求成功但无内容返回</p>
+</li>
+<li><p>206 范围请求成功</p>
+</li>
+<li><p>301 <strong>永久重定向</strong>； <strong>30(2|3|7)临时重定向，语义和实现有略微区别</strong>；（指定资源路径最后忘记加斜杠“/“,就会产生301状态码）</p>
+</li>
+<li><p>304 带if-modified-since 请求首部的条件请求，条件没有满足</p>
+</li>
+<li><p>400 <strong>语法错误</strong>（前端挨打）</p>
+</li>
+<li><p>401 需要认证信息</p>
+</li>
+<li><p>403 拒绝访问</p>
+</li>
+<li><p>404 找不到资源</p>
+</li>
+<li><p>412 除if-modified-since 以外的条件请求，条件未满足</p>
+</li>
+<li><p>500 <strong>服务器错误</strong>（后端挨打）</p>
+</li>
+<li><p>503 服务器宕机了（DevOps or IT 挨打）</p>
+</li>
+</ul>
+<p>3开头的重定向，如果服务器返回有重定向之后的URL，那么会<strong>强制</strong>客户机再次发送正确的请求报文，毕竟只有2开头算是成功的响应。</p>
+<h4 id="HTTP头部"><a href="#HTTP头部" class="headerlink" title="HTTP头部"></a>HTTP头部</h4><p>HTTP头部本质上是一个传送额外重要信息的键值对。主要分为：通用头部，请求头部，响应头部和实体头部。</p>
+<ul>
+<li><p>通用头部：请求报文和响应报文都有的头部，主要是提供一些通用的功能</p>
+<ul>
+<li>Connection：是否是长连接，连接是否关闭</li>
+<li>Date：报文创建时间</li>
+</ul>
+</li>
+<li><p>请求头部：请求报文特有的头部，<strong>用于补充请求的附加信息、客户端信息、对响应内容相关的优先级等内容</strong>。</p>
+<ul>
+<li>Accept：告诉服务器自己允许哪些媒体类型</li>
+<li>Accept-Charset: 浏览器可申明的字符集</li>
+<li>Accept-Encoding： 浏览器可接受的响应内容语言列表</li>
+<li>HOST：服务器的域名以及服务器所监听的端口号</li>
+<li>RANGE：<strong>表示请求某个实体的一部分</strong></li>
+<li>Authorization：用于表示 HTTP 协议中需要认证资源的认证信息</li>
+</ul>
+</li>
+<li><p>响应头部：响应报文特有的头部，用于告知服务器上的一些信息</p>
+<ul>
+<li>Age：创建响应时间</li>
+<li>Location： 重定向之后的URL，这个专门为3XX打造</li>
+<li>Server：服务器的信息</li>
+<li>Vary：缓存控制</li>
+</ul>
+</li>
+<li><p>实体头部：是对实体内容的一些约束和补充说明</p>
+<ul>
+<li>ALLOW：允许的请求信息，如ALLOW： GET, HEAD</li>
+<li>Content-xxx：返回内容的信息<ul>
+<li>encoding：编码信息</li>
+<li>length：长度，这个对于分块传送很重要</li>
+<li>Range： 整个返回体本部分的字节位置</li>
+<li>MD5：MD5校验值</li>
+</ul>
+</li>
+<li>Expire：响应的过期时间</li>
+<li>Last-Modified：请求资源最后修改的时间</li>
+</ul>
+</li>
+</ul>
+<p>其他问题：</p>
+<p>HTTP长连接和短连接的区别：</p>
+<ul>
+<li><p>长连接：多用于操作频繁，点对点的通讯，而且客户端连接数目较少的情况。例如即时通讯、网络游戏等。</p>
+</li>
+<li><p>短连接：用户数目较多的Web网站的 HTTP 服务一般用短连接。例如京东，淘宝这样的大型网站一般客户端数量达到千万级甚至上亿，若采用长连接势必会使得服务端大量的资源被无效占用，所以一般使用的是短连接。</p>
+</li>
+</ul>
+<h3 id="HTTPS相关"><a href="#HTTPS相关" class="headerlink" title="HTTPS相关"></a>HTTPS相关</h3><p>HTTP是一个很简单好用的协议，但是对安全性几乎没有保障，其不足点如下：</p>
+<ul>
+<li>通信使用明文（不加密），内容可能被窃听</li>
+<li>不验证通信方的身份，因此有可能遭遇伪装</li>
+<li>无法证明报文的完整性，所以可能已遭到篡改</li>
+</ul>
+<p>针对以上的不足，HTTPS对其有以下的改进：</p>
+<ul>
+<li>对通信使用加密技术：通过和SSL或TLS的组合使用，加密HTTP的通信内容。</li>
+<li>使用证书来确定通信方的身份：SSL不但提供加密处理，而且还使用一种被称为证书的手段，证书是一个由第三方发布的，伪造起来很难。</li>
+<li>HTTP虽然使用<strong>MD5散列值校验和确定文件的数字签名方法</strong>，但是还是不能保证报文完整性，这里使用的依旧是证书的功能，这样传输过程中就不会被破解了。</li>
+</ul>
+<p>因此由上可得HTTP = HTTP over SSL，SSL能把这些安全性问题都解决。</p>
+<h4 id="HTTP和HTTPS的差别："><a href="#HTTP和HTTPS的差别：" class="headerlink" title="HTTP和HTTPS的差别："></a>HTTP和HTTPS的差别：</h4><ul>
+<li><p>HTTP 协议以明文方式发送内容，数据都是未加密的，安全性较差。HTTPS 数据传输过程是加密的，安全性较好。</p>
+</li>
+<li><p>HTTP 和 HTTPS 使用的是完全不同的连接方式，用的端口也不一样，前者是 80 端口，后者是 443 端口。</p>
+</li>
+<li><p>HTTPS 协议需要到数字认证机构（Certificate Authority, CA）申请证书，一般需要一定的费用。</p>
+</li>
+<li><p>HTTP 页面响应比 HTTPS 快，主要因为 HTTP 使用 3 次握手建立连接，客户端和服务器需要握手 3 次，而 HTTPS 除了 TCP 的 3 次握手，还需要经历一个 SSL 协商过程。</p>
+</li>
+</ul>
+<h4 id="SSL协商："><a href="#SSL协商：" class="headerlink" title="SSL协商："></a>SSL协商：</h4><p>HTTPS（Hyper Text Transfer Protocol over Secure Socket Layer）是以安全为目标的 HTTP 协议，在 HTTP 的基础上通过传输加密和身份认证的方式保证了传输过程的安全性。其工作流程如下：</p>
+<p>① 客户端发起一个 HTTPS 请求，并连接到服务器的 443 端口，发送的信息主要包括自身所支持的算法列表和密钥长度等；</p>
+<p>② 服务端将自身所支持的所有加密算法与客户端的算法列表进行对比并选择一种支持的加密算法，然后将它和其它密钥组件一同发送给客户端。</p>
+<p>③ 服务器向客户端发送一个包含数字证书的报文，该数字证书中包含证书的颁发机构、过期时间、服务端的公钥等信息。</p>
+<p>④ 最后服务端发送一个完成报文通知客户端 SSL 的第一阶段已经协商完成。</p>
+<p>⑤ SSL 第一次协商完成后，客户端发送一个回应报文，报文中包含一个客户端生成的随机密码串，称为 pre_master_secre，并且该报文是经过证书中的公钥加密过的。</p>
+<p>⑥ 紧接着客户端会发送一个报文提示服务端在此之后的报文是采用pre_master_secre 加密的。</p>
+<p>⑦ 客户端向服务端发送一个 finish 报文，这次握手中包含第一次握手至今所有报文的整体校验值，最终协商是否完成取决于服务端能否成功解密。</p>
+<p>⑧ 服务端同样发送与第 ⑥ 步中相同作用的报文，已让客户端进行确认，最后发送 finish 报文告诉客户端自己能够正确解密报文。</p>
+<p>当服务端和客户端的 finish 报文交换完成之后，SSL 连接就算建立完成了，之后就进行和 HTTP 相同的通信过程，唯一不同的是在 HTTP 通信过程中并不是采用明文传输，而是采用对称加密的方式，其中对称密钥已经在 SSL 的建立过程中协商好了。</p>
+<h4 id="HTTPS加密方式："><a href="#HTTPS加密方式：" class="headerlink" title="HTTPS加密方式："></a>HTTPS加密方式：</h4><p>采取对称加密和非对称加密相结合的方式，首先使用SSL协议协议进行加密传输，为了弥补费对称加密的缺点，采用证书进一步加强非对称加密的安全性，通过非对称加密，客户端和服务端<strong>协商</strong>好之后进行通信传输的<strong>对称加密</strong>，后续的所有信息都通过该对称秘钥进行加密解密。</p>
+<p>证书：</p>
+<p>在HTTPS中证书一定是值得信任的，证书是由第三方机构颁发的，用户给公共密钥和一些个人身份信息给认证中心，认证中心返还给用户一个数字证书。</p>
+<p>对称加密：</p>
+<p>对称加密就是双方协商之后的共享秘钥加密。因为其加密解密的秘钥相同，而且是经历过协商，在通信中使用的。</p>
+<p>非对称加密：</p>
+<p>非对称加密就是公开秘钥加密。因为其有一把公钥和私钥，公开加密处理复杂，因此不适用于通信，但是很适合用于帮助对称加密交换密钥。</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>对称加密（共享加密）</th>
+<th>非对称加密（公开加密）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>加密处理</td>
+<td>双方使用同一个密钥</td>
+<td>使用公钥和私钥，公钥进行加密，私钥进行解密</td>
+</tr>
+<tr>
+<td>特点</td>
+<td>处理简单，方便</td>
+<td>处理困难，但是安全性高，不会被窃听</td>
+</tr>
+<tr>
+<td>用法</td>
+<td>用于通信传输，一般配合证书搭配使用</td>
+<td>用于共享密钥的传送，保证共享密钥的安全性</td>
+</tr>
+</tbody></table>
+<h3 id="HTTP2-0"><a href="#HTTP2-0" class="headerlink" title="HTTP2.0"></a>HTTP2.0</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>HTTP1.0</th>
+<th>HTTP1.1</th>
+<th>HTTP2.0</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>特点</td>
+<td>默认无连接</td>
+<td><strong>默认长连接，支持管线化</strong></td>
+<td><strong>二进制传送，封装成帧</strong></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>使用缓存处理</td>
+<td><strong>多路复用</strong></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>节约带宽</td>
+<td>头部压缩</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>使用请求头</td>
+<td>服务端推送</td>
+</tr>
+</tbody></table>
+<p>HTTP1.0没什么讲的。</p>
+<p>HTTP1.1中的几大特点都是根据头部信息有关：</p>
+<ul>
+<li>长连接，管线化： Connection字段的Keep-alive</li>
+<li>缓存处理：if-modified-since字段负责</li>
+<li>节约带宽：通过range只请求部分资源，不需要请求全部资源。</li>
+<li>请求头：使用HOST能够声明主机。</li>
+</ul>
+<p>HTTP2.0的提升就特别大了</p>
+<ul>
+<li><p>二进制传送：HTTP1.X的传输单位为报文，而2.0将其封装成帧，帧组成数据流，能够实现二进制传送。</p>
+</li>
+<li><p>多路复用：在封装成帧的概念下，帧里面有流ID和优先级，可以实现多个请求同时传输多个结果同时处理，而且可以ABA（先发A的上半部，再发B，再发B的下半部）这样发请求报文。再加上优先级的概念，这样处理请求可以完全实现多路复用。</p>
+</li>
+<li><p>头部压缩：。HTTP/2.0 通过 gzip 和 compress 压缩头部然后再发送，同时通信双方会维护一张头信息表，所有字段都记录在这张表中，在每次 HTTP 传输时只需要传头字段在表中的索引即可，大大减小了重传次数和数据量。</p>
+</li>
+<li><p>服务器推送。 服务器在客户端未经请求许可的情况下，可预先向客户端推送需要的内容，客户端在退出服务时可通过发送复位相关的请求来取消服务端的推送。</p>
+</li>
+</ul>
+<h3 id="其它"><a href="#其它" class="headerlink" title="其它"></a>其它</h3><p>这里来个经典问题</p>
+<p>网页解析全过程【用户输入网址到显示对应页面的全过程】</p>
+<p>% asset_img 流程图.png 复制构造循环引用 %}</p>
+<p>//todo</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《图解HTTP》</li>
+</ul>
+
       
     </div>
     
@@ -472,6 +793,12 @@
     
 
     <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/HTTP/" rel="tag"><i class="fa fa-tag"></i> HTTP</a>
+          
+        </div>
       
 
       
@@ -564,8 +891,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+      <section class="site-overview-wrap sidebar-panel">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
             
@@ -606,7 +942,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">23</span>
+                  <span class="site-state-item-count">24</span>
                   <span class="site-state-item-name">标签</span>
                 </a>
               </div>
@@ -682,6 +1018,22 @@
       </section>
 
       
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#HTTP%E5%8D%8F%E8%AE%AE%E4%BB%8B%E7%BB%8D"><span class="nav-number">1.</span> <span class="nav-text">HTTP协议介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AE%9A%E4%B9%89"><span class="nav-number">1.1.</span> <span class="nav-text">定义</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%89%B9%E7%82%B9"><span class="nav-number">1.2.</span> <span class="nav-text">特点</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#HTTP%E6%8A%A5%E6%96%87%E7%BB%93%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">HTTP报文结构</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link"><span class="nav-number">2.1.</span> <span class="nav-text"></span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%AF%B7%E6%B1%82%E8%A1%8C"><span class="nav-number">2.2.</span> <span class="nav-text">请求行</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%8A%B6%E6%80%81%E8%A1%8C"><span class="nav-number">2.3.</span> <span class="nav-text">状态行</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#HTTP%E5%A4%B4%E9%83%A8"><span class="nav-number">2.4.</span> <span class="nav-text">HTTP头部</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#HTTPS%E7%9B%B8%E5%85%B3"><span class="nav-number">3.</span> <span class="nav-text">HTTPS相关</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#HTTP%E5%92%8CHTTPS%E7%9A%84%E5%B7%AE%E5%88%AB%EF%BC%9A"><span class="nav-number">3.1.</span> <span class="nav-text">HTTP和HTTPS的差别：</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#SSL%E5%8D%8F%E5%95%86%EF%BC%9A"><span class="nav-number">3.2.</span> <span class="nav-text">SSL协商：</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#HTTPS%E5%8A%A0%E5%AF%86%E6%96%B9%E5%BC%8F%EF%BC%9A"><span class="nav-number">3.3.</span> <span class="nav-text">HTTPS加密方式：</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#HTTP2-0"><span class="nav-number">4.</span> <span class="nav-text">HTTP2.0</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B6%E5%AE%83"><span class="nav-number">5.</span> <span class="nav-text">其它</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">6.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
 
       
 
@@ -709,7 +1061,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">34.4k</span>
+    <span title="Site words total count">38.1k</span>
   
 </div>
 <!--
