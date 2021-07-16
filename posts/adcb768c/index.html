@@ -112,7 +112,7 @@
 
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="socket,网络编程," />
 
 
 
@@ -123,16 +123,18 @@
 
 
 
-<meta name="description" content="汲取知识">
+<meta name="description" content="本文主要介绍一些网络编程的基础知识，如socket介绍，一个完整的ECHO服务器该如何写？至于之后的项目提升，会在之后的文档中再做总结。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="网络编程基础">
 <meta property="og:url" content="http://kromites.github.io/posts/adcb768c/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="汲取知识">
+<meta property="og:description" content="本文主要介绍一些网络编程的基础知识，如socket介绍，一个完整的ECHO服务器该如何写？至于之后的项目提升，会在之后的文档中再做总结。">
 <meta property="og:locale">
 <meta property="article:published_time" content="2021-07-13T06:41:22.000Z">
-<meta property="article:modified_time" content="2021-07-14T08:40:52.278Z">
+<meta property="article:modified_time" content="2021-07-16T12:25:54.230Z">
 <meta property="article:author" content="Kromite">
+<meta property="article:tag" content="socket">
+<meta property="article:tag" content="网络编程">
 <meta name="twitter:card" content="summary">
 
 
@@ -381,6 +383,28 @@
           </span>
 
           
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B/" itemprop="url" rel="index">
+                    <span itemprop="name">网络编程</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
 
           
             
@@ -412,7 +436,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  0
+                  3k
                 </span>
               
 
@@ -428,7 +452,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  1
+                  11
                 </span>
               
             </div>
@@ -449,7 +473,115 @@
       
 
       
-        
+        <blockquote>
+<p>本文主要介绍一些网络编程的基础知识，如socket介绍，一个完整的ECHO服务器该如何写？至于之后的项目提升，会在之后的文档中再做总结。</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h3 id="Socket地址API"><a href="#Socket地址API" class="headerlink" title="Socket地址API"></a>Socket地址API</h3><h4 id="字节序"><a href="#字节序" class="headerlink" title="字节序"></a>字节序</h4><p>字节序就是字节在内存中排列的顺序，在计算机中主机上的字节序和网络中的字节序是不一样的，<strong>字节序分为大端和小端，指的是低地址存储的是高位字节还是低位字节</strong>。</p>
+<ul>
+<li>主机字节序：小端字节序，低位地址存储的是低位字节。</li>
+<li>网络字节序：大端字节序，低位地址存储的是高位字节。</li>
+</ul>
+<p>这样的话，在网络编程中，接收和发送这两个过程都需要将字节序转换。</p>
+<p>linux中提供以下四个函数来完成主机字节序和网络字节序之间的转换：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;netinet/in.h&gt;</span></span></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">*	这组函数命名就能看出来，特别简单明了。 </span></span><br><span class="line"><span class="comment">*	在发送的时候需要调用hton,在接收的时候需要调用ntol。</span></span><br><span class="line"><span class="comment">*	至于long和short </span></span><br><span class="line"><span class="comment">*		一般来说转换IP地址使用long</span></span><br><span class="line"><span class="comment">*		转换端口使用short</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">int</span> <span class="title">htonl</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">int</span> hostlong)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="keyword">int</span> <span class="title">htons</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="keyword">int</span> hostshort)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">int</span> <span class="title">ntohl</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="keyword">int</span> netlong)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="keyword">int</span> <span class="title">ntohs</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">short</span> <span class="keyword">int</span> netshort)</span></span>;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="通用Socket地址"><a href="#通用Socket地址" class="headerlink" title="通用Socket地址"></a>通用Socket地址</h4><p>socket网络编程接口中表示socket地址结构体为<code>sockaddr</code>：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;bits/socket.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sockaddr</span>&#123;</span></span><br><span class="line">  	<span class="keyword">sa_family_t</span> sa_family;	<span class="comment">// 地址族，一般和协议族相对应——UNIX,IPV4,IPV6</span></span><br><span class="line">    <span class="keyword">char</span> sa_data[<span class="number">14</span>];		<span class="comment">// socket地址值</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>这个通用的socket地址一般来说不好用，比如设置与获取IP地址和端口号就需要执行繁琐的位操作，所以Linux提供了一组socket结构体。称之为Linux专用Socket地址。</p>
+<h4 id="Linux专用Socket地址"><a href="#Linux专用Socket地址" class="headerlink" title="Linux专用Socket地址"></a>Linux专用Socket地址</h4><p>专用地址将Unix，IPv4和IPv6三个分开来了，在这里我们只介绍一下IPv4</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_in</span>&#123;</span></span><br><span class="line">  	<span class="keyword">sa_family_t</span> sin_family;		<span class="comment">// 地址族：AF_INET</span></span><br><span class="line">    <span class="keyword">u_int16_t</span> sin_port;			<span class="comment">// 端口号，需要网络字节序</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">in_addr</span> <span class="title">sin_addr</span>;</span>	<span class="comment">// IPv4地址结构体</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">in_addr</span>&#123;</span></span><br><span class="line">    <span class="keyword">u_int34_t</span> s_addr;			<span class="comment">// IPv4地址，要用网络字节序</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个专用地址的各字段含义已经足够明确。只不过需要注意的是，使用这个专用的地址仍需要转变成通用地址<code>sockaddr</code>, 因为所有socket编程接口使用的地址参数的类型都是<code>sockaddr</code>。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 项目中的代码 </span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;Address.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Address</span>&#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="function">sockaddr* <span class="title">getAddr</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    	<span class="keyword">return</span> <span class="keyword">reinterpret_cast</span>&lt;sockaddr*&gt;(&amp;sockaddr_);</span><br><span class="line">	&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    sockaddr_in sockaddr_;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="IP地址转换"><a href="#IP地址转换" class="headerlink" title="IP地址转换"></a>IP地址转换</h4><p>一般人们习惯使用可读性好的字符串来表示IP地址，比如使用点十分制来表示IPv4的地址。而编程中我们必须将其转换成整数（二进制）才能使用。因次这里有几个函数能够将点十分字符数组和网络字节序整数相转换。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;arpa/inet.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int_addr_t</span> <span class="title">inet_addr</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* strptr)</span></span>;			<span class="comment">// 将字符数组转化成 网络字节序</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">inet_aton</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* cp, struct in_addr* inp)</span></span>;	</span><br><span class="line"><span class="function"><span class="keyword">char</span>* <span class="title">inet_ntoa</span><span class="params">(struct in_addr in)</span></span>;					<span class="comment">// 将 in_addr 地址转变成字符数组</span></span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="Socket基础API"><a href="#Socket基础API" class="headerlink" title="Socket基础API"></a>Socket基础API</h3><p>上一单元介绍Socket地址相关的API，之后就要正式使用socket了。</p>
+<p>在Linux中一切皆文件，socket也不例外，因此<strong>socket就是一个可读可写可关闭可控制的文件描述符</strong>。</p>
+<h4 id="创建Socket"><a href="#创建Socket" class="headerlink" title="创建Socket"></a>创建Socket</h4><p>Linux通过<code>socket</code>系统调用来创建一个套接字。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">socket</span><span class="params">(<span class="keyword">int</span> domain, <span class="keyword">int</span> type, <span class="keyword">int</span> protocol)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*	</span></span><br><span class="line"><span class="comment">*	domain : 使用哪个底层协议族 </span></span><br><span class="line"><span class="comment">*	type: 指定服务类型，一般有两种服务类型 stream 和 ugram （对应着TCP的字节流和UDP的数据包）</span></span><br><span class="line"><span class="comment">*	protocol： 在两个参数下，再选择具体的协议，一般默认为0</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// in Socket.cpp :IPv4 ，字节流 | 非阻塞 | 调用fork关闭socket</span></span><br><span class="line"><span class="keyword">const</span> <span class="keyword">auto</span> res = <span class="built_in">socket</span>(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, <span class="number">0</span>);</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="命名Socket"><a href="#命名Socket" class="headerlink" title="命名Socket"></a>命名Socket</h4><p>创建socket之后，我们需要将一个socket和socket地址绑定，这称为socket命名。命名采用的是以下的系统调用</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">bind</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">const</span> struct sockaddr* my_addr, <span class="keyword">socklen_t</span> addrlen)</span></span>;</span><br><span class="line"><span class="comment">/*	</span></span><br><span class="line"><span class="comment">*	feature：该函数将my_addr所指的socket地址分配给未命名的sockfd文件描述符，addrlen参数指的是该socket地址的长度。</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="comment">// in Socket.cpp : 将socket地址与监听描述符绑定，之后这个监听描述符就代表socket</span></span><br><span class="line"><span class="keyword">auto</span> ret = <span class="built_in">bind</span>(listenfd, addr.<span class="built_in">getAddr</span>(), addr.<span class="built_in">size</span>());</span><br></pre></td></tr></table></figure>
+
+<p>在bind的时候容易遇到一个error：98（被绑定的地址正在使用），这是因为处于Time_wait状态，还没有完全释放该地址。</p>
+<h4 id="监听Socket"><a href="#监听Socket" class="headerlink" title="监听Socket"></a>监听Socket</h4><p>socket被命名之后，还不能马上接收客户连接，我们需要<strong>使用<code>listen</code>系统调用来创建监听队列以存放待处理的客户连接</strong>。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">listen</span><span class="params">(<span class="keyword">int</span> socketfd, <span class="keyword">int</span> backlog)</span></span>;</span><br><span class="line"><span class="comment">// socketfd = listenfd 套接字的文件描述符，backlog为创建的监听队列长度。</span></span><br><span class="line"><span class="comment">// in Socket.cpp </span></span><br><span class="line"><span class="keyword">auto</span> ret = <span class="built_in">listen</span>(listenfd, maxLength);</span><br></pre></td></tr></table></figure>
+
+<p><strong>backlog是参数提示内核监听队列的最大长度。如果监听队列的长度超过backlog，那么服务器将不再受理新的客户连接，客户端也将收到<code>ECONNREFUSED</code>的错误信息。注意这个客户连接是处于<code>ESTABLISHED</code>状态的。</strong></p>
+<p>再通俗易懂的解释一下，就是在这个服务器上总共最多只能有backlog个连接处于ESTABLISHED状态。</p>
+<h4 id="接受连接"><a href="#接受连接" class="headerlink" title="接受连接"></a>接受连接</h4><p>下面系统调用从listen监听队列中接收一个连接，这个函数是socket基础API中的重头戏。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">accept</span><span class="params">(<span class="keyword">int</span> sockfd, struct sockaddr* addr, <span class="keyword">socklen_t</span>* addrlen)</span></span>;</span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">* feature： 其参数唯一表示一个socket，返回的int是该连接的文件描述符，之后会对该文件描述符进行操作。</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> connfd = <span class="built_in">accept</span>(sockfd, addr.<span class="built_in">getAddr</span>(), &amp;addrlen);</span><br></pre></td></tr></table></figure>
+
+<p><strong>accept的功能只是通过socket从监听队列中取出连接，而不论连接处于何种状态（如established和close_wait），也不关心任何网络情况。</strong></p>
+<p>这个功能有两层意义</p>
+<ul>
+<li>一般来说从监听队列中取出的连接，其状态为established，但是如果这个时候突然断开连接，成为close_wait，accept也依旧能取出来，它只是做一个取的动作，而不检查其状态是否正常。</li>
+<li>不关心任何网络情况：一般来说很多人会以为accept是接收一个连接，完成三次握手，这是错误的！在进入监听队列的时候三次握手已经完成了，不然状态怎么可能为established，三次握手是内核自发完成的，用户系统调用无法干涉，因此accept只是个系统调用——在用户态进入内核，将内核中的连接取出，返回用户态时将连接文件描述符一并带出。</li>
+</ul>
+<h4 id="发起连接"><a href="#发起连接" class="headerlink" title="发起连接"></a>发起连接</h4><p>如果说服务器通过listen调用来被动接受连接，那么客户端需要使用<code>connect</code>主动与服务器建立连接</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">connect</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">const</span> struct sockaddr* serv_addr, <span class="keyword">socklen_t</span> addrlen)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// feature: 通过sockfd和sockaddr唯一标识一个socket，然后通过这个socket主动建立连接。</span></span><br><span class="line"><span class="comment">// 			一旦建立链接，那么sockfd唯一标识该连接并返回0，如果失败返回-1并设置errno</span></span><br></pre></td></tr></table></figure>
+
+<p>发起连接是客户端的事情，如果做服务器开发其实只是了解即可。</p>
+<h4 id="关闭连接"><a href="#关闭连接" class="headerlink" title="关闭连接"></a>关闭连接</h4><p>关闭连接实际上就是关闭该连接对应的socket，一般有两种关闭方式</p>
+<p>第一种方式就是使用close像关闭文字描述符的时候直接关闭它，不过fd是有引用计数的，close只不过是将fd的引用计数减1，当减为0才会关闭。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">close</span><span class="params">(<span class="keyword">int</span> fd)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>注意默认情况下close是立即关闭，如果关闭时还有数据要传送该怎么办？有一个SO_LINGER选项，能够延迟关闭时间。</p>
+<p>第二种方式是一种优雅关闭连接，使用shutdown系统调用</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">shutdown</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">int</span> howto)</span></span>;</span><br><span class="line"><span class="comment">// howto :  SHUT_RD, SHUT_WR, SHUT_RDWR</span></span><br></pre></td></tr></table></figure>
+
+<p>该系统调用能够分别关闭socket上的读或写，或者都关闭，但是这个关闭只是关闭了通道，并没有释放文件描述符。</p>
+<h4 id="数据读写"><a href="#数据读写" class="headerlink" title="数据读写"></a>数据读写</h4><p>数据读写直接使用read和write。这里就不再赘述。</p>
+<h3 id="Socket选项"><a href="#Socket选项" class="headerlink" title="Socket选项"></a>Socket选项</h3><p>socket选项有很多，值得注意的是为socket设置选项的时间一般是有要求的。</p>
+<ul>
+<li>服务端设置选项需要在<code>listen</code>之前</li>
+<li>客户端设置选项需要再<code>connect</code>之前</li>
+</ul>
+<p>原因是这两个函数启动之后就直接进行三次握手了，设置选项需要在这之前，以下是设置选项的方法。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">getsockopt</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">int</span> level, <span class="keyword">int</span> option_name, <span class="keyword">void</span>* option_value, <span class="keyword">socklen_t</span>* <span class="keyword">restrict</span> option_len)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">setsockopt</span><span class="params">(<span class="keyword">int</span> sockfd, <span class="keyword">int</span> level, <span class="keyword">int</span> option_name, <span class="keyword">const</span> <span class="keyword">void</span>* option_value, <span class="keyword">socklen_t</span>* option_len)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// sockfd表明指定的socket</span></span><br><span class="line"><span class="comment">// level指定要操作哪个协议的选项（即属性） -&gt; SOL_SOCKET, IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP</span></span><br><span class="line"><span class="comment">// option_xxx 所选选项的信息</span></span><br></pre></td></tr></table></figure>
+
+<p>接下来我们来看看常见的选项。</p>
+<h4 id="SO-REUSEADDR选项"><a href="#SO-REUSEADDR选项" class="headerlink" title="SO_REUSEADDR选项"></a><code>SO_REUSEADDR</code>选项</h4><p>之前我们讨论过TIME_WAIT状态，如果关闭服务器重启的话，可能会出现errno 98。这是因为socket地址还没有释放。使用这个选项的话能够让强制使用这个socket地址。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> sock = <span class="built_in">socket</span>(PF_INET, SOCK_STREAM, <span class="number">0</span>);</span><br><span class="line"><span class="keyword">int</span> reuse = <span class="number">1</span>;</span><br><span class="line"><span class="built_in">setsockopt</span>(sock, SOL_SOCKET, SO_REUSERADDR, &amp;reuse, <span class="built_in"><span class="keyword">sizeof</span></span>(reuse));</span><br></pre></td></tr></table></figure>
+
+<h4 id="SO-RCVBUF和SO-SNDBUF选项"><a href="#SO-RCVBUF和SO-SNDBUF选项" class="headerlink" title="SO_RCVBUF和SO_SNDBUF选项"></a><code>SO_RCVBUF</code>和<code>SO_SNDBUF</code>选项</h4><p>​    两个选项分别表示TCP接收缓冲区和发送缓冲区的大小，一般来说接收缓冲期的最小值为256字节，而发送期的最小值为2048个字节。这两个选项的目的是想扩大内核中的接收/发送缓冲区，这样确保TCP连接用于足够的空闲缓冲区来处理拥塞。</p>
+<h4 id="SO-RCVLOWAY和SO-SNDLOWAT选项"><a href="#SO-RCVLOWAY和SO-SNDLOWAT选项" class="headerlink" title="SO_RCVLOWAY和SO_SNDLOWAT选项"></a><code>SO_RCVLOWAY</code>和<code>SO_SNDLOWAT</code>选项</h4><p>​    两个选项分表表示接收缓冲区和发送缓冲区的低水位标记。低水位标记是被用于I/O多路复用中判断该socket是否可读或可写，如果缓冲区内可读/可写数据超过了低水位，那么I/O复用系统就会将该事件通知给应用程序说明该socket已经有数据可读/可写了。</p>
+<p>​    一般默认的话，低水位标记都为1字节</p>
+<h4 id="SO-LINGER选项"><a href="#SO-LINGER选项" class="headerlink" title="SO_LINGER选项"></a><code>SO_LINGER</code>选项</h4><p>​    该选项是用于控制close系统调用在关闭TCP连接时的行为。</p>
+<p>​    默认情况下，当我们使用close关闭一个socket时，close会立即返回，<strong>TCP模块负责把该socket对应的TCP缓冲区中残留的数据发送给对方。</strong></p>
+<p>​    设置该选项时我们需要为socket传递以下结构体。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">linger</span>&#123;</span></span><br><span class="line">    <span class="keyword">int</span> l_onoff;		<span class="comment">// 0 - 关闭该选项，非0 - 开启该选项</span></span><br><span class="line">    <span class="keyword">int</span> l_linger;		<span class="comment">// 滞留时间</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>根据这两个成员变量不同值，close能产生以下行为。</p>
+<ul>
+<li><code>l_onoff</code>等于0。close使用默认情况关闭socket</li>
+<li><code>l_onoff</code>非0，<code>l_linger</code>等于0。 close调用依旧立即返回，不过此时是直接丢弃socket对应的TCP发送缓冲区中的残留数据，同时给对方发送一个RST。这为服务器提供了异常终止一个连接的方法。</li>
+<li><code>l_onoff</code>非0，<code>l_linger</code>大于0。此时如果是阻塞的，那么必须等待<code>l_linger</code>时间才能发送并确认，如果不阻塞，将TCP发送完收到确认即可。</li>
+</ul>
+<h3 id="网络信息API"><a href="#网络信息API" class="headerlink" title="网络信息API"></a>网络信息API</h3><p>socket地址的两大要素：端口和IP地址都是用数值表示，这里有些能够直接记录网络信息的API,这些不是重点，在需要的时候查就行了。</p>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>​    本文记录了一些网络编程的基础知识，在最开始看的时候也觉得全是一些API，这些API都要使用过才能体会到它们的用处和原理。做笔记的时候已经将webserver做完了，这个时候来看这些东西确实很基础，但是在回顾的时候也可以借此机会进行code reveiw，这样能够对套接字编程会有进一步的了解。</p>
+<p>​    下一篇相关文章就开始对整个web服务器进行介绍，来探讨一下reactor模型。</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《UNP》</li>
+<li>《APUE》</li>
+<li>《Linux高性能服务器编程》</li>
+</ul>
+
       
     </div>
     
@@ -472,6 +604,14 @@
     
 
     <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/socket/" rel="tag"><i class="fa fa-tag"></i> socket</a>
+          
+            <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B/" rel="tag"><i class="fa fa-tag"></i> 网络编程</a>
+          
+        </div>
       
 
       
@@ -564,8 +704,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+      <section class="site-overview-wrap sidebar-panel">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
             
@@ -606,7 +755,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">24</span>
+                  <span class="site-state-item-count">26</span>
                   <span class="site-state-item-name">标签</span>
                 </a>
               </div>
@@ -682,6 +831,22 @@
       </section>
 
       
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#Socket%E5%9C%B0%E5%9D%80API"><span class="nav-number">1.</span> <span class="nav-text">Socket地址API</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AD%97%E8%8A%82%E5%BA%8F"><span class="nav-number">1.1.</span> <span class="nav-text">字节序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%80%9A%E7%94%A8Socket%E5%9C%B0%E5%9D%80"><span class="nav-number">1.2.</span> <span class="nav-text">通用Socket地址</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Linux%E4%B8%93%E7%94%A8Socket%E5%9C%B0%E5%9D%80"><span class="nav-number">1.3.</span> <span class="nav-text">Linux专用Socket地址</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#IP%E5%9C%B0%E5%9D%80%E8%BD%AC%E6%8D%A2"><span class="nav-number">1.4.</span> <span class="nav-text">IP地址转换</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Socket%E5%9F%BA%E7%A1%80API"><span class="nav-number">2.</span> <span class="nav-text">Socket基础API</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%88%9B%E5%BB%BASocket"><span class="nav-number">2.1.</span> <span class="nav-text">创建Socket</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%91%BD%E5%90%8DSocket"><span class="nav-number">2.2.</span> <span class="nav-text">命名Socket</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%9B%91%E5%90%ACSocket"><span class="nav-number">2.3.</span> <span class="nav-text">监听Socket</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%8E%A5%E5%8F%97%E8%BF%9E%E6%8E%A5"><span class="nav-number">2.4.</span> <span class="nav-text">接受连接</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8F%91%E8%B5%B7%E8%BF%9E%E6%8E%A5"><span class="nav-number">2.5.</span> <span class="nav-text">发起连接</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%85%B3%E9%97%AD%E8%BF%9E%E6%8E%A5"><span class="nav-number">2.6.</span> <span class="nav-text">关闭连接</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%95%B0%E6%8D%AE%E8%AF%BB%E5%86%99"><span class="nav-number">2.7.</span> <span class="nav-text">数据读写</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Socket%E9%80%89%E9%A1%B9"><span class="nav-number">3.</span> <span class="nav-text">Socket选项</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#SO-REUSEADDR%E9%80%89%E9%A1%B9"><span class="nav-number">3.1.</span> <span class="nav-text">SO_REUSEADDR选项</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#SO-RCVBUF%E5%92%8CSO-SNDBUF%E9%80%89%E9%A1%B9"><span class="nav-number">3.2.</span> <span class="nav-text">SO_RCVBUF和SO_SNDBUF选项</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#SO-RCVLOWAY%E5%92%8CSO-SNDLOWAT%E9%80%89%E9%A1%B9"><span class="nav-number">3.3.</span> <span class="nav-text">SO_RCVLOWAY和SO_SNDLOWAT选项</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#SO-LINGER%E9%80%89%E9%A1%B9"><span class="nav-number">3.4.</span> <span class="nav-text">SO_LINGER选项</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BD%91%E7%BB%9C%E4%BF%A1%E6%81%AFAPI"><span class="nav-number">4.</span> <span class="nav-text">网络信息API</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">5.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">6.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
 
       
 
@@ -709,7 +874,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">38.1k</span>
+    <span title="Site words total count">41.6k</span>
   
 </div>
 <!--
