@@ -1707,11 +1707,11 @@
 <h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><p>《Redis设计与实现》</p>
 ]]></content>
       <categories>
-        <category>redis</category>
+        <category>Redis</category>
       </categories>
       <tags>
+        <tag>Redis</tag>
         <tag>数据结构</tag>
-        <tag>redis</tag>
       </tags>
   </entry>
   <entry>
