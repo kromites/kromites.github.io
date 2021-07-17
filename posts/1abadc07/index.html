@@ -112,7 +112,7 @@
 
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="死锁,同步," />
 
 
 
@@ -123,14 +123,18 @@
 
 
 
-<meta name="description" content="汲取知识">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Kromite">
-<meta property="og:url" content="http://kromites.github.io/tags/%E5%AF%B9%E8%B1%A1/index.html">
+<meta name="description" content="死锁是一个在操作系统和数据库中都非常常见的一个问题。本文我们就来介绍一下死锁相关的知识">
+<meta property="og:type" content="article">
+<meta property="og:title" content="死锁">
+<meta property="og:url" content="http://kromites.github.io/posts/1abadc07/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="汲取知识">
+<meta property="og:description" content="死锁是一个在操作系统和数据库中都非常常见的一个问题。本文我们就来介绍一下死锁相关的知识">
 <meta property="og:locale">
+<meta property="article:published_time" content="2021-07-17T12:22:00.000Z">
+<meta property="article:modified_time" content="2021-07-17T13:43:53.583Z">
 <meta property="article:author" content="Kromite">
+<meta property="article:tag" content="死锁">
+<meta property="article:tag" content="同步">
 <meta name="twitter:card" content="summary">
 
 
@@ -161,13 +165,13 @@
 
 
 
-  <link rel="canonical" href="http://kromites.github.io/tags/对象/"/>
+  <link rel="canonical" href="http://kromites.github.io/posts/1abadc07/"/>
 
 
 
 
 
-  <title>标签: 对象 | Kromite</title>
+  <title>死锁 | Kromite</title>
   
 
 
@@ -186,7 +190,7 @@
     
   
 
-  <div class="container sidebar-position-right ">
+  <div class="container sidebar-position-right page-post-detail">
     <div class="headband"></div>
 
     <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
@@ -324,54 +328,314 @@
           <div id="content" class="content">
             
 
-  
-  
-  
-  <div class="post-block tag">
+  <div id="posts" class="posts-expand">
+    
 
-    <div id="posts" class="posts-collapse">
-      <div class="collection-title">
-        <h1>对象<small>标签</small>
-        </h1>
-      </div>
+  
 
-      
-        
+  
+  
+  
 
   <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/1abadc07/">
 
-      <h2 class="post-title">
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Kromite">
+    </span>
+
+    
+      <header class="post-header">
+
         
-            <a class="post-title-link" href="/posts/404ab54a/" itemprop="url">
-              
-                <span itemprop="name">Redis对象</span>
-              
-            </a>
         
-      </h2>
+          <h1 class="post-title" itemprop="name headline">死锁</h1>
+        
 
-      <div class="post-meta">
-        <time class="post-time" itemprop="dateCreated"
-              datetime="2021-07-17T15:14:42+08:00"
-              content="2021-07-17" >
-          07-17
-        </time>
-      </div>
+        <div class="post-meta">
+          <span class="post-time">
+          
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-17T20:22:00+08:00">
+                2021-07-17
+              </time>
+            
 
-    </header>
-  </article>
+            
 
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" itemprop="url" rel="index">
+                    <span itemprop="name">操作系统</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/posts/1abadc07/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/posts/1abadc07/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+            <div class="post-wordcount">
+              
+                
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-file-word-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">字数统计&#58;</span>
+                
+                <span title="字数统计">
+                  2.3k
+                </span>
+              
+
+              
+                <span class="post-meta-divider">|</span>
+              
+
+              
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-clock-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">阅读时长 &asymp;</span>
+                
+                <span title="阅读时长">
+                  7
+                </span>
+              
+            </div>
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <blockquote>
+<p>死锁是一个在操作系统和数据库中都非常常见的一个问题。本文我们就来介绍一下死锁相关的知识</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h4 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h4><p>​    计算机系统中有很多独占性的资源，在同一时刻只能每个资源只能由一个进程使用。比如同一时刻不能有两个打印机同时输出结果，因为文件在文件打印进程是一个独占性资源。</p>
+<p>​    这样的话如果两个进程独占性的访问某个资源，从而等待另外一个资源的执行结果，会导致两个进程都被阻塞，并且两个进程都不会释放各自的资源，这种情况下就是死锁（deadlock）</p>
+<p>死锁可以发生在任何层面，在不同的机器之间可能会发生死锁，在数据库系统中也会导致死锁，比如进程 A 对记录 R1 加锁，进程 B 对记录 R2 加锁，然后进程 A 和 B 都试图把对象的记录加锁，这种情况下就会产生死锁。</p>
+<p>死锁能够极大降低CPU的效率，而且甚至会出现错误或者异常，因此这是一个很重要的知识点。</p>
+<p>下面我们就来讨论一下什么是死锁、死锁的条件是什么、死锁如何预防、活锁是什么等。</p>
+<p>首先你需要先了解一个概念，那就是资源是什么。</p>
+<h4 id="资源"><a href="#资源" class="headerlink" title="资源"></a>资源</h4><p>​    资源分为可抢占资源和不可抢占资源。</p>
+<ul>
+<li>可抢占资源：可以从拥有它的进程中抢占而不造成任何影响。比如内存，任何进程都可以直接抢占。</li>
+<li>不可抢占资源：指的是除非出现错误或者异常，否则进程无法抢占指定资源。比如光盘，文件打印等。</li>
+</ul>
+<p>因此一般来说死锁是发生在不可抢占资源上。以下进程处理不可抢占资源的流程</p>
+<ol>
+<li>请求资源：如果资源不存在，那么请求进程会强制等待（一般来说进程处于阻塞态）。</li>
+<li>使用资源：使用资源时，该资源被标记为正在使用，其他进程不能抢占这个资源。</li>
+<li>释放资源：使用完资源，将其标志位空闲状态，其他进程可以去请求该资源。</li>
+</ol>
+<h4 id="死锁条件"><a href="#死锁条件" class="headerlink" title="死锁条件"></a>死锁条件</h4><p>针对我们上面的描述，资源死锁可能出现的情况主要有</p>
+<ul>
+<li>互斥条件：每个资源都被分配给了一个进程或者资源是可用的</li>
+<li>保持和等待条件：已经获取资源的进程被认为能够获取新的资源</li>
+<li>不可抢占条件：分配给一个进程的资源不能强制的从其他进程抢占资源，它只能由占有它的进程显示释放</li>
+<li>循环等待：死锁发生时，系统中一定有两个或者两个以上的进程组成一个循环，循环中的每个进程都在等待下一个进程释放的资源。</li>
+</ul>
+<p>以上就是发生死锁的四个条件，上面四种情况必须同时发生，才会出现死锁。如果其中一个条件不成立，死锁就不会发生。</p>
+<p>总结一下，进程一般都是本身持有资源，但是又想着别人的资源，结果别人也是这么想的，那么就互相死锁了。</p>
+<h4 id="死锁避免"><a href="#死锁避免" class="headerlink" title="死锁避免"></a>死锁避免</h4><p>​    死锁是不可接受的，一般来说需要去尽量避免死锁。</p>
+<p>​    死锁避免的最常规方式是正确加锁，在合适的临界区加锁和解锁，养成良好代码习惯。</p>
+<p>​    但是四所本质是无法避免的，因为它需要后的未知的资源与请求，一般来说我们对死锁进行避免是通过破坏死锁的条件。</p>
+<ul>
+<li>破坏互斥条件：如果资源不被一个进程独占，那么死锁不会产生。尽量做到尽可能少的进程请求资源。</li>
+<li>破坏保持等待谈条件：如果我们能够阻止持有资源的进程请求其他资源，我们就能消除死锁。不如进程在请求其他资源时，首先释放所占用的资源，然后再尝试一次获取全部资源。这个方法的缺点是无法合理利用资源。</li>
+<li>破坏不可抢占条件：使用虚拟化的方式来实现抢占，但这也不是个好方法。</li>
+<li>破坏循环等待条件：这个是最靠谱的方法，一般来说是对所有资源统一编号，进程可以在任何时间提出请求，但是所有的请求都必须按照资源的顺序提出。如果按照此分配规则的话，那么资源分配之间不会出现环。但是如果资源很多的时候，编号也是无法使用。</li>
+</ul>
+<h4 id="死锁检测和恢复"><a href="#死锁检测和恢复" class="headerlink" title="死锁检测和恢复"></a>死锁检测和恢复</h4><p>​    当死锁发生之后，对死锁进行检测并且从死锁中恢复。</p>
+<p>​    死锁检测手段</p>
+<ul>
+<li>使用周期函数，每隔k分钟检测一次，或者CPU使用率降低到某一阈值，对其进行检测算法</li>
+<li>死锁检测算法：通过资源和进程的向量关系，来判断哪个进程发生了死锁。</li>
+</ul>
+<p>​    死锁恢复，发生死锁之后如何从死锁中恢复</p>
+<ul>
+<li>通过抢占恢复，其实这也是破坏了不可抢占的条件，这往往需要人工干预。</li>
+<li>使用回滚恢复，定期存储检查点映像，如果发生死锁就回退到正常映像版本中。这也是数据库中常见死锁恢复的方法。</li>
+<li>杀死进程恢复，杀死一个死锁进程就会破坏掉循环等待条件，从而达到死锁恢复的效果。</li>
+</ul>
+<h4 id="其他问题"><a href="#其他问题" class="headerlink" title="其他问题"></a>其他问题</h4><p><strong>两阶段加锁</strong></p>
+<p>​    虽然很多情况下死锁的避免和预防都能处理，但是效果并不好。随着时间的推移，提出了很多优秀的算法用来处理死锁。例如在数据库系统中，一个经常发生的操作是请求锁住一些记录，然后更新所有锁定的记录。当同时有多个进程运行时，就会有死锁的风险。</p>
+<p>​    一种解决方式是使用 两阶段提交(two-phase locking)。顾名思义分为两个阶段，一阶段是进程尝试一次锁定它需要的所有记录。如果成功后，才会开始第二阶段，第二阶段是执行更新并释放锁。第一阶段并不做真正有意义的工作。</p>
+<p>​    如果在第一阶段某个进程所需要的记录已经被加锁，那么该进程会释放所有锁定的记录并重新开始第一阶段。从某种意义上来说，这种方法类似于预先请求所有必需的资源或者是在进行一些不可逆的操作之前请求所有的资源。</p>
+<p>​    不过在一般的应用场景中，两阶段加锁的策略并不通用。如果一个进程缺少资源就会半途中断并重新开始的方式是不可接受的。</p>
+<p><strong>通信死锁</strong></p>
+<p>​    之前讨论的都是资源死锁，其实<strong>每个进程因为等待其他进程引起的事件而产生阻塞</strong>，这也是一种死锁，称之为通信死锁。</p>
+<p>​    通信死锁不能过通过调度的方式来解除，不过因为事件是可以设置定时器的，可以通过超时来规避死锁。</p>
+<p><strong>活锁</strong></p>
+<p>死锁：多个进程拿住资源不放手。<br>活锁：多个进程同时松开资源，又同时请求资源，依然造成阻塞。就像两个人相对着走，同时向同一边跨一步让行，结果还是对着</p>
+<p><strong>饥饿</strong></p>
+<p>当进程没有资源的时候，就叫做饥饿。</p>
+<h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><p>​    死锁是一类通用问题，任何操作系统都会产生死锁。当每一组进程中的每个进程都因等待由该组的其他进程所占有的资源而导致阻塞，死锁就发生了。这种情况会使所有的进程都处于无限等待的状态。</p>
+<p>​    死锁的检测和避免可以通过安全和不安全状态来判断，其中一个检测方式就是银行家算法；当然你也可以使用鸵鸟算法对死锁置之不理，但是你肯定会遭其反噬。</p>
+<p>​    也可以在设计时通过系统结构的角度来避免死锁，这样能够预防死锁；也可以破坏死锁的四个条件来破坏死锁。资源死锁并不是唯一性的死锁，还有通信间死锁，可以设置适当的超时时间来完成。</p>
+<p>​    活锁和死锁的问题有些相似，它们都是一种进程无法继续向下执行的状态。由于进程调度策略导致尝试获取进程的一方永远无法获得资源后，进程会导致饥饿的出现。</p>
+<h4 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h4><ul>
+<li>《现代操作系统》</li>
+<li><a target="_blank" rel="noopener" href="https://leetcode-cn.com/leetbook/read/awesome-os-guide/">https://leetcode-cn.com/leetbook/read/awesome-os-guide/</a></li>
+</ul>
 
       
     </div>
+    
+    
+    
+  <div>
+    
+      <div>
+    
+        <div style="text-align:center;color: #ccc;font-size:14px;">-------------本文结束<i class="fa fa-paw"></i>感谢您的阅读-------------</div>
+    
+</div>
 
+    
+  </div>
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/%E6%AD%BB%E9%94%81/" rel="tag"><i class="fa fa-tag"></i> 死锁</a>
+          
+            <a href="/tags/%E5%90%8C%E6%AD%A5/" rel="tag"><i class="fa fa-tag"></i> 同步</a>
+          
+        </div>
+      
+
+      
+      
+        <div class="post-widgets">
+        
+
+        
+
+        
+          
+          <div id="needsharebutton-postbottom">
+            <span class="btn">
+              <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </span>
+          </div>
+        
+        </div>
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/posts/4f5d4e8d/" rel="next" title="系统调用">
+                <i class="fa fa-chevron-left"></i> 系统调用
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/posts/81b224e1/" rel="prev" title="中断">
+                中断 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
   </div>
   
   
   
+  </article>
 
-  
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
 
 
           </div>
@@ -379,6 +643,13 @@
 
 
           
+
+  
+    <div class="comments" id="comments">
+    </div>
+  
+
+
 
         </div>
         
@@ -399,8 +670,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+      <section class="site-overview-wrap sidebar-panel">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
             
@@ -516,6 +796,22 @@
         </div>
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%89%8D%E8%A8%80"><span class="nav-number">1.</span> <span class="nav-text">前言</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%B5%84%E6%BA%90"><span class="nav-number">2.</span> <span class="nav-text">资源</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%AD%BB%E9%94%81%E6%9D%A1%E4%BB%B6"><span class="nav-number">3.</span> <span class="nav-text">死锁条件</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%AD%BB%E9%94%81%E9%81%BF%E5%85%8D"><span class="nav-number">4.</span> <span class="nav-text">死锁避免</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%AD%BB%E9%94%81%E6%A3%80%E6%B5%8B%E5%92%8C%E6%81%A2%E5%A4%8D"><span class="nav-number">5.</span> <span class="nav-text">死锁检测和恢复</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%85%B6%E4%BB%96%E9%97%AE%E9%A2%98"><span class="nav-number">6.</span> <span class="nav-text">其他问题</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">8.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       
@@ -671,6 +967,10 @@
   
 
   
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
 
   
 
