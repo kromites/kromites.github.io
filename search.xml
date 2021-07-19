@@ -28,9 +28,447 @@
       </tags>
   </entry>
   <entry>
+    <title>Redis数据库</title>
+    <url>/posts/eb52a7b2/</url>
+    <content><![CDATA[<blockquote>
+<p>在介绍了Redis基本数据结构，Redis对象之后，本章来全面且简要的介绍一下Redis数据库。</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h4 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h4><p>​    本章将对Redis服务器的数据库进行详细介绍。说明服务器保存数据库的方法，客户端切换数据库的方法，数据库保存键值对的方法，以及针对数据库的添加、删除、查看、更新操作的实现方法等。此外，服务器针对键的过期的方法。</p>
+<h4 id="服务器中的数据库"><a href="#服务器中的数据库" class="headerlink" title="服务器中的数据库"></a>服务器中的数据库</h4><p>​    Redis服务器将所有数据库都保存在服务器状态结构的db数组中。每一个db数组项代表着一个服务器</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">redisServer</span>&#123;</span></span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 一个数组，保存着服务器中所有的数据库</span></span><br><span class="line">    redisDb *db;</span><br><span class="line">  	<span class="comment">// 服务器的数据库数量, 有服务器配置的database选项决定，默认情况下，该选项的值为16.即redis服务器会创建16个数据库。</span></span><br><span class="line">    <span class="keyword">int</span> dbnum;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="切换数据库"><a href="#切换数据库" class="headerlink" title="切换数据库"></a>切换数据库</h4><p>​    每个Redis客户端都有自己的目标数据库，每当客户端执行数据库写命令或者数据库读命令的时候，目标数据库会成为这些命令的操作对象。 <strong>默认情况下，操纵的都是0号数据库。但是客户端可以用SELECT命令切换数据库。</strong></p>
+<p>为什么可以这样呢？ 这是因为在服务器内部，还有另外一个结构标志着客户端的状态。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">redisClient</span>&#123;</span></span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 记录客户端当前正在使用的数据库</span></span><br><span class="line">    <span class="comment">// 该指针指向redisServer.db数组其中的一个项，这个项就是客户端的目标数据库。</span></span><br><span class="line">    <span class="comment">// 使用SELECT 2，可以将目标数据库改为2号数据库</span></span><br><span class="line">    redisDb *db;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="数据库键空间"><a href="#数据库键空间" class="headerlink" title="数据库键空间"></a>数据库键空间</h4><p>​    Redis是一个键值对数据库服务器。每个数据库都是由一个<code>redisDb</code>结构表示，<strong>其中该结构中的<code>dict</code>字典保存了数据库中的所有键值对，我们将这个字典称之为键空间。（键空间包括键和值）</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">redisDb</span> &#123;</span></span><br><span class="line">  	<span class="comment">// ...</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 数据库键空间，保存着数据库中的所有键值对</span></span><br><span class="line">    dict *dict;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>键空间的键就是数据库的键，每个键都是一个字符串对象。</li>
+<li>键空间的值就是数据库的值，这个值可以是五种对象的任意一个。</li>
+</ul>
+<p>由于键空间是字典结构，那么可以对这个字典进行添加删除更新取值等操作。</p>
+<ul>
+<li><p>添加新建：SET命令等（如HSET）</p>
+</li>
+<li><p>删除键：DEL命令</p>
+</li>
+<li><p>更新键：SET命令等（如HSET）</p>
+</li>
+<li><p>对键取值：GET命令等（如LRANGE）</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> 		命令  键    值</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 添加</span></span><br><span class="line">redis &gt; SET date &quot;2013.12.1&quot;</span><br><span class="line">OK</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 删除</span>	</span><br><span class="line">redis &gt; DEL book</span><br><span class="line">(integer) 1</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 更新</span></span><br><span class="line">redis &gt; SET message &quot;blah blah&quot;</span><br><span class="line">OK</span><br><span class="line">redis &gt; HSET book page 320</span><br><span class="line">(integer) 1</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 取值</span></span><br><span class="line">redis &gt; GET message</span><br><span class="line">&quot;hello world&quot;</span><br><span class="line"></span><br><span class="line">redis &gt; LRANGE alphabet 0 -1</span><br><span class="line">1) &quot;a&quot;</span><br><span class="line">2) &quot;b&quot;</span><br><span class="line">3) &quot;c&quot;</span><br></pre></td></tr></table></figure></li>
+<li><p>其他键操作：如清空数据库的FLUSHDB，返回数据库键数量的DBSIZE命令等。</p>
+</li>
+<li><p>读写键空间的维护操作</p>
+<ul>
+<li><p>在读取一个键时（读和写操作都要对键进行读取），<strong>服务器会根据键是否存在更新服务器的键空间命中次数和不命中次数。</strong>（这两个可以在INFO stats命令中查看<code>keyspace_hits</code>属性和<code>keyspace_misses</code>属性中查看。</p>
+</li>
+<li><p>在读取一个键的之后，服务器会更新键的LRU时间，这个时间可以计算键的闲置时间，使用命令<code>OBJECT idletime&lt;key&gt;</code>可以查看键key的闲置时间。</p>
+</li>
+<li><p><strong>如果服务器读取一个键时发现这个键已经过期了，那么服务器会先删除这个键，再执行余下的操作。</strong></p>
+</li>
+<li><p>如果有客户端使用<strong>WATCH</strong>命令监视某个键，那么服务器对该键进行修改之后，会将这个键标记为脏(dirty)，从而让事务注意到这个键已经被修改了。</p>
+</li>
+<li><p><strong>服务器每次修改一个键之后，都会对脏键计数器增加1，这个计数器会触发服务器的持久化和复制操作</strong></p>
+</li>
+<li><p>如果服务器开启了数据库通知功能，那么在对键进行修改之后，服务器会按照配置发送相应的数据库通知。</p>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="设置键的生存时间或过期时间"><a href="#设置键的生存时间或过期时间" class="headerlink" title="设置键的生存时间或过期时间"></a>设置键的生存时间或过期时间</h4><ul>
+<li>命令</li>
+</ul>
+<p>​    通过EXPIRE命令或者PEXPIRE命令，客户端可以以秒或者毫秒精度为数据库中的某个键设置<strong>生存时间</strong>(TTL)——在经过指定的时间后，服务器会自动的将这个键给删除。（P是毫秒）</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta">redis&gt;</span><span class="bash"> <span class="built_in">set</span> key value</span></span><br><span class="line">OK</span><br><span class="line"><span class="meta">redis&gt;</span><span class="bash"> expire key 5</span></span><br><span class="line">(integer) 1</span><br><span class="line"><span class="meta">redis&gt;</span><span class="bash"> get key    // 5秒之内</span></span><br><span class="line">&quot;value&quot;</span><br><span class="line"><span class="meta">redis&gt;</span><span class="bash"> get key 	  // 5秒之后</span></span><br><span class="line">(nil)</span><br></pre></td></tr></table></figure>
+
+<p>​    同样的，通过EXPIREAT命令或PEXPIREAT命令，客户端可以以秒或者毫秒精度给数据库中的某个键设置<strong>过期时间</strong>（expire time）—— 过期时间是个<strong>时间戳</strong>，当时间到来之后，服务器会自动删除这个键。</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta">redis&gt;</span><span class="bash"> <span class="built_in">set</span> key value</span></span><br><span class="line">ok</span><br><span class="line"><span class="meta">redis&gt;</span><span class="bash"> expireat key 1377257300	  1377257300 是一个时间戳，表示没到这个时间是存在的</span></span><br></pre></td></tr></table></figure>
+
+<p>​    以上两个是生存时间和过期时间命令的用法。现在我们可以去了解下这些命令的实现方式。</p>
+<p>实际上，EXPIRE,PEXPIRE, EXPIREAT三个命令都是使用PEXPIREAT命令实现的。他们都会通过一定的转换来得到这个命令。</p>
+<ul>
+<li><p>过期字典</p>
+<p><code>redisDb</code>结构的expires字典保存了数据库中所有键的过期时间，我们称这个字典是过期字典。</p>
+<ul>
+<li>过期字典的键是一个指针，指向键空间中的某个键对象（即某个数据库键）</li>
+<li>过期字典的值是一个long long类型的整数，这个整数保存了键所保存的数据库键的过期时间——一个毫秒精度的UNIX时间戳。</li>
+</ul>
+</li>
+<li><p>移除过期时间</p>
+<p>通过PERSIST命令可以移除一个键的过期时间（该命令是PEXPIREAT命令的反操作), 在过期字典中查找给定的键，并解除键和值的关联。</p>
+</li>
+<li><p>计算生存时间</p>
+<p>通过TTL/PTTL以秒/毫秒来计算并返回键的剩余生存时间。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment"># 伪代码</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">pttl</span>(<span class="params">key</span>):</span></span><br><span class="line">    <span class="comment"># 键不存在</span></span><br><span class="line">    <span class="keyword">if</span> key <span class="keyword">not</span> <span class="keyword">in</span> redisDb.<span class="built_in">dict</span>:</span><br><span class="line">        <span class="keyword">return</span> -<span class="number">2</span></span><br><span class="line">    <span class="comment"># 尝试获得键的过期时间</span></span><br><span class="line">    <span class="comment"># 如果键没有设置过期时间，那么 expire_time_in_ms 将为 None</span></span><br><span class="line">    expire_time_in_ms = redisDb.expires.get(key)</span><br><span class="line">    </span><br><span class="line">    <span class="comment"># 键没有设置过期时间</span></span><br><span class="line">    <span class="keyword">if</span> expire_time_in_ms <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">        <span class="keyword">return</span> -<span class="number">1</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment"># 获得当前时间</span></span><br><span class="line">	now_ms = get_current_unix_timestamp_in_ms()</span><br><span class="line">    <span class="comment"># 过期时间减去当前时间，得出的差就是键的剩余生存时间</span></span><br><span class="line">    <span class="keyword">return</span> (expire_time_in_ms - now_ms)</span><br></pre></td></tr></table></figure></li>
+<li><p>过期键的判定</p>
+<p>通过检查过期字典，程序可以检查一个给定键是否过期</p>
+<ul>
+<li>检查给定键是否存在于过期字典： 如果存在，那么取得键的过期时间。</li>
+<li>检查当前UNIX时间戳是否大于键的过期时间：如果是的话，那么键已经过期，否则键为过期。</li>
+</ul>
+</li>
+</ul>
+<h4 id="过期键的删除策略"><a href="#过期键的删除策略" class="headerlink" title="过期键的删除策略"></a>过期键的删除策略</h4><p>​    上节了解到过期键会保存在过期字典中，那么问题来了，采用什么策略来删除过期键呢？ 以下有三种可能答案</p>
+<ol>
+<li><strong>定时删除</strong>：在设置键的过期时间时，同时创建一个定时器，让定时器在键的过期时间来临时，立即执行对键的删除操作。</li>
+<li><strong>惰性删除</strong>：放任键过期不管，每次从键空间取出键的时候，检查是否过期，如果过期的话那么就删除。</li>
+<li><strong>定期删除</strong>：每隔一段时间，程序就对数据库进行一次检查，删除里面的过期键。</li>
+</ol>
+<p>其中1和3是主动删除，2是被动删除。</p>
+<ol>
+<li>定时删除：该策略是对内存最友好的，定时器能够确保过期键尽可能快的被删除，并且释放过期键所占的内存。但是这个是对CPU时间最不友好的，因为删除过期键会占用一部分CPU时间，当CPU时间紧张的时候就可能对服务器性能造成影响。</li>
+<li>惰性删除：这个策略和上面的策略相反，对内存最不友好，对CPU时间最友好。</li>
+<li>定期删除：该策略是两者策略的一种折中，但是这个难点是如何确定删除操作执行的时长和频率。</li>
+</ol>
+<h4 id="Redis的过期键删除策略"><a href="#Redis的过期键删除策略" class="headerlink" title="Redis的过期键删除策略"></a>Redis的过期键删除策略</h4><p>​    Redis服务器实际上使用的是惰性删除+定期删除，这样可以合理使用CPU时间和避免浪费内存空间之间取得平衡。</p>
+<ul>
+<li><p>惰性删除策略的实现</p>
+<p>过期键的惰性删除策略由<code>db.c/expireIfNeeded</code>函数实现，所有读写数据库的Redis命令在执行之前会调用该函数对输入键进行检查。</p>
+<ul>
+<li>如果输入键已经过期，那么<code>expireIfNeeded</code>函数将输入键从数据库中的删除。</li>
+<li>如果输入键未过期，那么<code>expireIfNeeded</code>函数不做动作。</li>
+</ul>
+<p>该函数相当于一个过滤器，可以让真正的命令接触不到过期键。</p>
+</li>
+<li><p>定期删除策略的实现</p>
+<p>过期键的定期删除策略由<code>redis.c/activeExpireCycle</code>函数实现，每当Redis的服务器周期性操作执行时，这个函数都会被调用。它在规定时间内，分多次遍历服务器的各个数据库，从数据库的expires字典中随机检查一部分键的过期时间，并删除其中的过期键。</p>
+</li>
+</ul>
+<h4 id="AOF，RDB和复制功能对过期键的处理"><a href="#AOF，RDB和复制功能对过期键的处理" class="headerlink" title="AOF，RDB和复制功能对过期键的处理"></a>AOF，RDB和复制功能对过期键的处理</h4><ul>
+<li><p>针对RDB文件</p>
+<ul>
+<li><p>生成RDB文件：一言以蔽之，<strong>已过期的键不会被保存到新创建的RDB文件中</strong>。</p>
+</li>
+<li><p>载入RDB文件：</p>
+<p>在启动Redis服务器时，如果服务器开启了RDB功能，那么服务器将对RDB文件进行载入：</p>
+<ul>
+<li>如果服务器是主服务器模式运行，那么在载入RDB文件时，程序会对文件中保存的键进行检查，未过期的键会被载入数据库，过期键被忽略。</li>
+<li>如果是从服务器模式运行，则无论是否过期，都会直接载入到数据库中。不过，<strong>因为主从服务器在进行数据同步的时候，从服务器的数据库就会被清空。</strong>因此不会对从服务器造成影响。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>针对AOF文件</p>
+<ul>
+<li><p>AOF写入</p>
+<p>当服务器以AOF持久化模式运行时，如果数据库中的某个键已经过期，但还没有被删除，那么对AOF文件不会造成任何影响。</p>
+<p>当过期键被删除之后，AOF会在文件追加一条DEL命令，来显示记录该键被删除。</p>
+</li>
+<li><p>AOF重写</p>
+<p>当重写的时候，那么直接忽略已过期的键即可。</p>
+</li>
+</ul>
+</li>
+<li><p>复制模式</p>
+<p>当服务器运行在复制模式下，从服务器的过期键删除动作由主服务器控制：</p>
+<ul>
+<li><p>主服务器在删除一个过期键之后，会显式地向所有从服务器发送一个DEL命令，告知从服务器删除这个过期键。</p>
+</li>
+<li><p>从服务器在执行客户端发送的读命令时，即使碰到过期键也不会将过期键删除，而是继续像处理未过期的键一样处理过期键。</p>
+</li>
+<li><p>从服务器只有在接到主服务器发来的DEL命令之后，才会删除过期键。</p>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="数据库通知"><a href="#数据库通知" class="headerlink" title="数据库通知"></a>数据库通知</h4><p>​    数据库通知这个功能可以让客户端通过订阅给定的频道或者模式，来获取数据库中的键的变化，以及数据库中的命令的执行情况。</p>
+<p>​    通知分为以下两类：</p>
+<ul>
+<li>键空间通知：某个键执行了什么命令，关注的主体是键。</li>
+<li>键事件通知：某个命令被哪个键执行了，关注的主体是命令。</li>
+</ul>
+<p>发送通知</p>
+<p>​    发送数据库通知的功能是由<code>notify.c/notifyKeyspaceEvent</code>函数实现的</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">notifyKeyspaceEvent</span><span class="params">(<span class="keyword">int</span> type, <span class="keyword">char</span>* event, robj* key, <span class="keyword">int</span> dbid)</span></span>;</span><br><span class="line"><span class="comment">// type：想要发送通知的类型，程序会根据这个值来判断通知是否就是服务器配置的通知类型，从而决定是否发送通知</span></span><br><span class="line"><span class="comment">// event, key, dbid 分别是事件的名称、产生事件的键，以及产生事件的数据库号码，函数通过这三个参数构建一个事件。</span></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="重点回顾"><a href="#重点回顾" class="headerlink" title="重点回顾"></a>重点回顾</h4><ul>
+<li>Redis服务器的所有数据库都保存在<code>redisServer.db</code>数组中，而数据库的数量则由<code>redisServer.dbnum</code>属性保存。</li>
+<li>客户端通过修改目标数据库指针，让它指向<code>redisServer.db</code>数组中的不同元素来切换不同的数据库。</li>
+<li><strong>数据库主要有dict和expires两个字典构成，其中dict字典负责保存键值对，而expires字典则负责保存键的过期时间。</strong></li>
+<li><strong>因为数据库由字典构成，所有对数据库的操作都是建立在字典操作的基础上。</strong></li>
+<li>数据库的键总是一个字符串对象，而值则可以是任意一种Redis对象类型。</li>
+<li>expires字典的键指向数据库的某一个键，而值则记录了该数据库键的过期时间，是一个以毫秒为单温的UNIX时间戳。</li>
+<li>Redis使用惰性删除和定期删除两种策略删除过期键： 惰性删除只在碰到过期键才进行删除工作，定期删除是每隔一段时间主动查找并删除过期键。</li>
+<li>执行SAVE和BGSAVE命令所产生的RDB文件不会包含已经过期的键。</li>
+<li>执行BGREWRITEAOF命令所产生的重写AOF文件不会包含过期的键。</li>
+<li>当一个过期键被删除之后，服务器会追加一条DEL命令在AOF文件末尾，显式删除过期键。</li>
+<li>当<em><strong>主服务器</strong></em>删除一个过期键之后，它会向所有<em><strong>从服务器</strong></em>发送一条DEL命令，显式删除过期键。</li>
+<li>从服务器发现过期键也不会删除它，而是等待主服务器发来DEL命令，才会删除它。这样统一、中心化过期键删除策略保证主从服务器数据的<strong>一致性</strong>。</li>
+<li><strong>当Redis命令对数据库进行修改之后，服务器会根据配置向客户端发送数据库通知。</strong></li>
+</ul>
+<h4 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h4><ul>
+<li>《Redis设计与实现》</li>
+</ul>
+]]></content>
+      <categories>
+        <category>Redis</category>
+      </categories>
+      <tags>
+        <tag>Redis</tag>
+        <tag>数据库</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>中断</title>
     <url>/posts/81b224e1/</url>
-    <content><![CDATA[]]></content>
+    <content><![CDATA[<blockquote>
+<p>本篇文章介绍一下操作系统中重要的概念——中断。中断是将处理器和外部设备系统工作的重要方式。中断机制就是让硬件在需要的时候向内核发出信号。不过中断也不是一句话就能够总结的，因此写此文章来记录一下中断的全部面貌。</p>
+</blockquote>
+<span id="more"></span>
+
+<p>处理器和外部设备系统工协同工作的机制：<strong>让硬件需要的时候再向内核发送信号</strong>。这个机制就是中断机制。</p>
+<h4 id="中断介绍"><a href="#中断介绍" class="headerlink" title="中断介绍"></a>中断介绍</h4><p>​    <strong>中断本质是一种特殊的电信号，由硬件发向处理器</strong>。处理器收到中断后，会马上向操作系统反映该信号的到来，然后就由操作系统去负责处理新来的数据。</p>
+<ul>
+<li><p>中断随时可以产生，因此内核随时可能因为新来的中断而被打断。</p>
+</li>
+<li><p>每个中断都通过唯一的中断号标志。这些中断值通常被称为中断请求（IRQ）线，每个IRQ线都会被关联一个数值量。如在经典PC机上，IRQ0是时钟中断，IRQ1是键盘中断。</p>
+</li>
+</ul>
+<blockquote>
+<p> 异常：</p>
+<p> ​    异常和中断不同，它在产生时必须考虑与处理器时钟同步。因此常常被称为同步中断，异常是由处理器本身产生的。</p>
+<p> ​    在处理器执行到由于编程失误而导致的错误指令的时候，或者实在执行期间出现特殊情况，必须靠内核来处理的时候，处理器就会产生一个异常。</p>
+<p> ​    异常的例子：在上一章系统调用时，软中断陷入内核，引起的是系统调用处理异常。</p>
+</blockquote>
+<h4 id="中断处理程序"><a href="#中断处理程序" class="headerlink" title="中断处理程序"></a>中断处理程序</h4><p>​    在响应一个特定中断的时候，内核会执行一个函数，该函数叫做<strong>中断处理程序或中断服务例程</strong>。（中断处理程序是一个内核执行的函数）</p>
+<p>​    Linux中断程序就是普通的C函数，不过必须按照特定的方式声明，以便内核识别。但是中断程序和其他内核函数的区别在于：</p>
+<ul>
+<li>普通内核函数运行在进程上下文中。</li>
+<li><strong>中断程序运行在中断上下文中，中断上下文也称原子上下文，不可阻塞。</strong></li>
+<li>由于中断上下文不可阻塞，因此执行中断处理程序得迅速！</li>
+</ul>
+<h4 id="上半部与下半部的对比"><a href="#上半部与下半部的对比" class="headerlink" title="上半部与下半部的对比"></a>上半部与下半部的对比</h4><p>​    中断处理被分为两个部分：</p>
+<p>​    中断处理程序为上半部分：接到中断立即执行，只做严格实现的工作，此时<strong>中断被禁止。</strong></p>
+<p>​    下半部：被允许稍后完成的工作，此时为开中断。</p>
+<h4 id="注册中断处理程序"><a href="#注册中断处理程序" class="headerlink" title="注册中断处理程序"></a>注册中断处理程序</h4><p>中断处理程序是管理硬件的驱动程序的组成部分。每个设备都有相关的驱动程序，如果设备使用中断（大部分设备如此），那么响应的驱动程序就注册一个中断处理程序。</p>
+<p>驱动程序可以通过<code>request_irq()</code>函数注册一个中断处理程序（它被声明在文件<code>&lt;linux/interrupt.h&gt;</code>中），并且激活给定的中断线，以处理中断。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">/* request_irq: 分配一条给定的中短线 */</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">request_irq</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> irq, <span class="keyword">irq_handle_t</span> handler, usigned <span class="keyword">long</span> flags, <span class="keyword">const</span> <span class="keyword">char</span>* name, <span class="keyword">void</span>* dev)</span></span>;</span><br><span class="line"><span class="comment">// 第一个参数irq表示要分配的中断号。</span></span><br><span class="line"><span class="comment">// 第二个参数handler这是一个指针，指向实际中断处理程序</span></span><br><span class="line"><span class="comment">// typedef irqreturn_t (*irq_handler_t) (int, void*);</span></span><br></pre></td></tr></table></figure>
+
+
+
+<ol>
+<li><p>中断处理程序标志</p>
+<p>在上面那个函数，第三个参数flags可以为0，也可以是一个或多个标志的位掩码。</p>
+<ul>
+<li><p>IRQF_DISABLED：意味着内核在处理中断程序本身期间，要禁止所有的其他中断</p>
+</li>
+<li><p>IRQF_SAMPLE_RANDOM：此标志表明这个设备产生的中断对内核熵池有贡献</p>
+</li>
+<li><p>IRQF_TIMER：特别为系统定时器的中断处理而准备的</p>
+</li>
+<li><p>IRQF_SHARED：可以在多个中断的处理程序之间的贡献中断线</p>
+</li>
+</ul>
+<p>第四个参数name是与中断相关的设备的ASCII文本表示。</p>
+<p>第五个参数dev用于共享中短线，当一个中断处理程序释放时，dev将提供标志信息。如果不需要共享中断线，设置为空(NULL)就行。</p>
+</li>
+</ol>
+<p>注意：<code>request_irq()</code>函数可能睡眠，原因是该函数中调用了<code>kmalloc()</code>,这个函数是睡眠的。</p>
+<ol start="2">
+<li><p>释放中断处理程序</p>
+<p><strong>卸载驱动程序时，需要注销相应的中断处理程序，并释放中断线</strong>。（中断线如果是共享的，那么删除处理程序即可，如果不是共享的或者是最后一个处理程序，则必须禁用该中断线）</p>
+</li>
+</ol>
+<h4 id="编写中断程序"><a href="#编写中断程序" class="headerlink" title="编写中断程序"></a>编写中断程序</h4><ol>
+<li><p>重入和中断处理程序</p>
+<p><strong>当前中断线在处理时总是被禁止的，所以中断处理程序无须重入。同一个中断处理程序绝对不会被同时调用以处理嵌套的中断。</strong></p>
+</li>
+<li><p>共享的中断处理程序</p>
+<ol>
+<li>request_irq()的flags被设为IRQF_SHARED</li>
+<li>dev参数必须唯一</li>
+<li>中断处理程序必须区分是否真产生了中断</li>
+</ol>
+</li>
+<li><p>中断处理程序实例<br>例：RTC(real-time clock)驱动程序：从系统定时器独立出来，用于设置系统时钟（向某个特定寄存器或IO地址写入时间即可）、周期性的定时器或报警器（中断实现）。</p>
+</li>
+</ol>
+<h4 id="中断上下文"><a href="#中断上下文" class="headerlink" title="中断上下文"></a>中断上下文</h4><p>​    当执行一个中断处理程序时，内核处于中断上下文中。中断上下文有以下的特点：</p>
+<ul>
+<li>中断上下文不可睡眠，也不可能重新调度。</li>
+<li>中断上下文有着严格的时间限制，因为它打断了其他代码。</li>
+<li>中断处理程序并不具备自己的栈，需要共享别人的堆栈，而内核栈本身就有限，因此中断使用栈必须节约。</li>
+</ul>
+<h4 id="中断处理机制的实现"><a href="#中断处理机制的实现" class="headerlink" title="中断处理机制的实现"></a>中断处理机制的实现</h4><p>​    中断处理系统非常依赖体系结构。</p>
+<img src="/posts/81b224e1/%E4%B8%AD%E6%96%AD%E4%BB%8E%E7%A1%AC%E4%BB%B6%E5%88%B0%E5%86%85%E6%A0%B8%E7%9A%84%E8%B7%AF%E7%94%B1.png" class title="中断从硬件到内核的路由">
+
+<p>设备产生中断 ⇒ 总线把电信号发给中断控制器 ⇒ 若为激活的，中断控制器将中断发往处理器 ⇒ 处理器关闭中断 ⇒ 跳到中断处理程序入口 ⇒ 返回内核运行中断的代码。</p>
+<p>中断开始于预定义入口，和系统调用类似，处理器会跳到对应的一个唯一位置。</p>
+<p><strong><code>/proc/interrupts</code></strong></p>
+<p><code>procfs</code>是一个虚拟文件系统，它只存在于内核内存，一般安装于/proc目录。在procfs读写文件都要调用内核函数，模拟从真实数据中读写。 </p>
+<h4 id="中断控制"><a href="#中断控制" class="headerlink" title="中断控制"></a>中断控制</h4><p>Linux内核提供了一组接口用于操作机器上的中断状态。这些接口可以提供能够禁止当前处理器的中断系统，或屏蔽掉整个机器的一条中断线的能力。</p>
+<p>一般来说，<strong>控制中断系统的原因是需要提供同步</strong>。</p>
+<p>通过禁止中断，中断处理程序不会抢占当前代码。不过也可以禁止内核抢占，这样内核就可以在该处理器上同步。</p>
+<p>不过如果是多处理器的并发访问，这两种方式都不能解决同步问题。这种情况下就要提供锁，锁在下一个部分会重点介绍。</p>
+<ul>
+<li><p>禁止和激活中断</p>
+<p>用于禁止和激活当前处理器的本地中断。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">local_irq_disable(); <span class="comment">// 禁止		-&gt; cli指令</span></span><br><span class="line">local_irq_enable();	 <span class="comment">// 激活		-&gt; sti指令</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 这两个函数都是以单个汇编指令实现</span></span><br></pre></td></tr></table></figure></li>
+<li><p>禁止指定的中断线</p>
+<p>禁止所有中断的函数有的时候用不到，有的时候只需要屏蔽掉一条中断线即可。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">disable_irq</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> irq)</span></span>; <span class="comment">//只有当前正在执行的所有处理程序完成后才能返回。</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">disable_irq_nosync</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> irq)</span></span>;<span class="comment">//不会等待当前中断处理程序完成</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">enable_irq</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> irq)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">synchronize_irq</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> irq)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>这些函数可以在中断或者进程上下文中调用，而且不会睡眠。设备必须支持中断线共享，不然这些函数无意义。</p>
+</li>
+<li><p>中断状态</p>
+<ul>
+<li>宏<code>irqs_diable()</code>用于判断本地处理器上中断是否被禁止。</li>
+<li><code>in_interrupt()</code>：判断内核是否在中断处理程序或下半部处理程序中</li>
+<li><code>in_irq()</code>：判断是否在中断处理程序</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>截止到现在讲述的是中断处理程序，中断处理程序是在中断的上半部，处于中断上下文中，中断处理程序执行的时间很短，因为它把有必要推迟的东西全部放到下半部去执行了，之后我们就来看看下半部。</p>
+</blockquote>
+<h4 id="下半部"><a href="#下半部" class="headerlink" title="下半部"></a>下半部</h4><p>​    上一章讨论了内核为处理中断提供的<strong>中断处理程序机制</strong>。中断处理程序是内核必不可少的部分，但是也存在着一些局限。因此只能完成上半部工作。局限包括</p>
+<ul>
+<li>中断处理程序以<strong>异步</strong>方式执行，并且可能打断其他代码的执行，这样的话必须得快！</li>
+<li>如果一个中断处理程序正在执行，那么与该中断同级的其他中断会被屏蔽（当然也可能设计该处理器的所有中断都被屏蔽），这样的话为了让其他中断响应，中断越快越好。</li>
+<li>中断处理程序是对硬件进行操作，因此一般有时限要求。</li>
+<li><strong>中断处理程序运行在中断上下文，不能阻塞。</strong></li>
+</ul>
+<p>在诸多局限下，一般来说中断处理程序最好处理：</p>
+<ul>
+<li>对时间敏感的任务；</li>
+<li>和硬件相关的任务；</li>
+<li>该任务不能被其他中断打断。</li>
+</ul>
+<p>其它的任务都可以放到下半部去做。</p>
+<p><strong>这种设计能够让系统处于中断屏蔽状态（上半部）的时间尽可能短，以此提高系统的响应能力。</strong></p>
+<p>下半部的工作实现机制：</p>
+<ul>
+<li>软中断（和系统调用中的软件中断不同，<strong>系统调用的中断是软件触发的中断，所以称为软中断，而对于中断下半部的软中断，虽然也是软件触发，但是并不经过中断向量表。</strong>）</li>
+<li><code>tasklet</code></li>
+<li>工作队列</li>
+<li>内核定时器（推后到具体的某一时间）</li>
+</ul>
+<h4 id="软中断"><a href="#软中断" class="headerlink" title="软中断"></a>软中断</h4><ol>
+<li><p>软中断的实现</p>
+<p>软中断在<strong>编译器静态分配</strong>的。由<code>softirq_action</code>结构表示</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span>&#123;</span></span><br><span class="line">	<span class="keyword">void</span> (*action)(struct softirq_action *);</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span> <span class="title">softirq_vec</span>[<span class="title">NR_SOFTIRQS</span>];</span>要么</span><br><span class="line"><span class="comment">//每个被注册的软中断占据数组一项，因此最多32个软中断</span></span><br></pre></td></tr></table></figure></li>
+<li><p>软中断的执行</p>
+<p>一般来说中断处理程序在返回前标记它的软中断，使其在稍后合适时刻执行。软中断执行都在<code>do_softirq()</code>函数中执行。该函数会遍历每一个待处理的软中断，并执行它。</p>
+<p>一个软中断不能抢占另外一个软中断，软中断只能够被中断处理程序抢占。</p>
+</li>
+<li><p>使用软中断</p>
+<p>软中断是在系统中对<strong>时间要求最严格以及最重要的下半部使用。</strong>内核定时器和<code>tasklet</code>都建立在软中断的实现上。软中断使用方便，性能也不错，但是需要对时间要求严格。</p>
+<ul>
+<li>分配索引：在编译期间给每个软中断分配索引，索引小的先执行。</li>
+<li>注册处理程序：运行时调用<code>open_softirq()</code>注册<strong>软中断处理程序</strong></li>
+<li>触发软中断：使用<code>raise_softirq()</code>将软中断设置为挂起，让它在<code>do_softirq()</code>时投入运行。<strong>在触发一个软中断之前必须先禁止中断，触发后再恢复</strong>。</li>
+</ul>
+</li>
+</ol>
+<h4 id="tasklet"><a href="#tasklet" class="headerlink" title="tasklet"></a><code>tasklet</code></h4><p>​        <code>tasklet</code>是一个利用软中断实现的下半部机制，二者很像。在大部分情况都使用这个机制而非软中断。</p>
+<ol>
+<li><p><code>tasklet</code>的实现：</p>
+<p>tasklet由两类软中断代表：<code>HI_SOFTIRQ</code>和<code>TASKLET_SOFTIRQ</code>,前者优先执行。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 结构体</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tasklet_struct</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">tasklet_struct</span> *<span class="title">next</span>;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> state;    <span class="comment">//tasklet状态，仅能0、TASKLET_STATE_SCHED,TASKLET_STATE_RUN</span></span><br><span class="line">	<span class="keyword">atomic_t</span> count;			<span class="comment">//引用计数，不为0，则tasklet被禁止；为0才可执行</span></span><br><span class="line">	<span class="keyword">void</span> (*func)(<span class="keyword">unsigned</span> <span class="keyword">long</span>);		<span class="comment">// tasklet处理函数</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> data;					<span class="comment">//给tasklet处理函数的参数</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+<li><p><code>tasklet</code>的使用：</p>
+<p>(1)声明自己的tasklet</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">DECLARE_TASKLET(name,func,data) <span class="comment">//静态的创建</span></span><br><span class="line">Tasklet_init(t, tasklet_hander, dev) <span class="comment">//动态的创建</span></span><br></pre></td></tr></table></figure>
+
+<p>(2)编写自己的tasklet处理函数</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="function">Void <span class="title">tasklet_handler</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> data)</span></span></span><br></pre></td></tr></table></figure>
+
+<p>(3)调度自己的tasklet</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line">tasklet_schedule(struct tasklet_struct *t);</span><br></pre></td></tr></table></figure>
+
+<p>(4)tasklet的执行—ksoftirqd<br>前面说到tasklet的实现也是通过软中断来实现的，并且在ksoftirqd中会执行软中断。<br>每个处理器都有一个辅助处理软中断的内核线程—ksoftirqd/n n就是处理器的编号。<br>线程的实现在 kernel/softirq.c中，被设计为以下的死循环</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="keyword">for</span>(;;)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span>(!softirq_pending(CPU))</span><br><span class="line">    Schedule();</span><br><span class="line">    Set_current_state(TASK_RUNNING);</span><br><span class="line">    <span class="keyword">while</span>(softirq_pending(cpu)</span><br><span class="line">    &#123;</span><br><span class="line">	    do_doftirq();</span><br><span class="line">	    If(need_resched())</span><br><span class="line">	    &#123;</span><br><span class="line">	   	 	Schedule();</span><br><span class="line">	    &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    Set_current_state()TASK_INTERRUPTIBLE);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>​       只要有待处理的软中断，ksoftirq就会调用do_softirq()去处理他们。同时tasklet是软中断实现的，也就会同时被调用。</p>
+</li>
+</ol>
+<p>tasklet相较于软中断的优点：</p>
+<ul>
+<li>可以动态创建和销毁，因为软中断是编译期创建的</li>
+<li>接口相对比较简洁，只利用了其中两个软中断，所有的复杂性都被简洁的接口隐藏起来了。</li>
+<li>tasklet有着序列化保障，同一类型的tasklet不允许同时进行（即使是在不同的处理器上）</li>
+</ul>
+<p>因此只有当tasklet无法被实现的时候，才会选择软中断。</p>
+<h4 id="工作队列"><a href="#工作队列" class="headerlink" title="工作队列"></a>工作队列</h4><p>​    工作队列不是基于软中断，而是把工作推后，<strong>交由一个内核线程去执行（这个下半部是在进程上下文中）</strong>，这样的话工作队列允许重新调度甚至是睡眠。</p>
+<p>​    因此如果任务需要睡眠，选工作队列。如果不需要，就选软中断和tasklet。</p>
+<ol>
+<li><p>工作队列的实现</p>
+<p>工作队列可以让你的驱动创建一个专门的工作者线程来处理要推后的工作，不过工作队列子系统提供了缺省的工作者线程称为<code>events/n</code>,n为处理器编号。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// work</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">work_struct</span> &#123;</span></span><br><span class="line">	<span class="keyword">atomic_long_t</span> data;		<span class="comment">//参数</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">entry</span>;</span></span><br><span class="line">	<span class="keyword">work_func_t</span> func;		<span class="comment">//待执行函数</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// work_queue thread</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">workqueue_struct</span>&#123;</span></span><br><span class="line">    <span class="comment">//...</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>工作、工作队列、工作者线程之间的关系.png</p>
+<img src="/posts/81b224e1/%E5%B7%A5%E4%BD%9C%E3%80%81%E5%B7%A5%E4%BD%9C%E9%98%9F%E5%88%97%E3%80%81%E5%B7%A5%E4%BD%9C%E8%80%85%E7%BA%BF%E7%A8%8B%E4%B9%8B%E9%97%B4%E7%9A%84%E5%85%B3%E7%B3%BB.png" class title="工作、工作队列、工作者线程之间的关系"></li>
+</ol>
+<p>最高一层是工作者线程。系统允许多种工作者线程，<strong>每种类型</strong>，<strong>CPU上都有一个该类的工作者线程。</strong>每个工作者线程都要cpu_workqueue_struct结构体表示。</p>
+<h4 id="下半部的选择机制"><a href="#下半部的选择机制" class="headerlink" title="下半部的选择机制"></a>下半部的选择机制</h4><p>三种机制的工作环境不同，因此选择机制也不同。</p>
+<ul>
+<li><p><strong>tasklet与软中断不能睡眠，是中断上下文环境</strong></p>
+</li>
+<li><p><strong>工作队列可以睡眠，可以产出调度，是进程上下文环境</strong></p>
+<p>当选择方法的时候，如果需要睡眠，则选择任务队列；当不需要睡眠的时候，选择tasklet，当tasklet无法实现时才考虑使用软中断。</p>
+</li>
+<li><p>软中断处理程序执行的时候，允许响应中断，但自己不能休眠。</p>
+</li>
+<li><p><strong>如果软中断在执行的时候再次触发，则别的处理器可以同时执行，所以加锁很关键。</strong></p>
+</li>
+<li><p>tasklet负责执行的序列化保障，<strong>两个类型的tasklet不允许同时执行</strong>，<strong>即使在不同的处理器上也不行。所以相同tasklet之间不需要操心同步的问题，只需要考虑不同tasklet之间的同步问题。</strong></p>
+</li>
+</ul>
+<h4 id="下半部之间加锁"><a href="#下半部之间加锁" class="headerlink" title="下半部之间加锁"></a>下半部之间加锁</h4><p>首先来看一下三者的比较</p>
+<table>
+<thead>
+<tr>
+<th align="center">下半部</th>
+<th align="center">上下文</th>
+<th align="center">顺序执行比较</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">软中断</td>
+<td align="center">中断</td>
+<td align="center">没有</td>
+</tr>
+<tr>
+<td align="center"><code>tasklet</code></td>
+<td align="center">中断</td>
+<td align="center">同类型不能同时执行</td>
+</tr>
+<tr>
+<td align="center">工作队列</td>
+<td align="center">进程</td>
+<td align="center">没有（和进程上下文一样被调度）</td>
+</tr>
+</tbody></table>
+<p>上表可知，tasklet的一个优点是保证了一定的序列化保障。但是不同类型的tasklet还是需要使用锁。</p>
+<ul>
+<li>如果<strong>进程上下文和下半部共享数据</strong>，在访问数据之前，需要<strong>禁止下半部</strong>处理并得到锁的使用权，这样是为了本地和SMP的保护，防止死锁的出现。</li>
+<li>如果<strong>中断上下文和下半部共享数据</strong>，在访问数据之前，需要<strong>禁止中断</strong>并得到锁的使用权，这样也是为了本地和SMP的保护，防止死锁的出现。</li>
+</ul>
+<p>即三者的优先级：<strong>进程上下文 &gt; 下半部 &gt; 中断</strong></p>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>中断是一种电信号，是硬件给内核发送的通知。内核一收到这个通知之后，立刻停住手头的工作，切换到中断上下文，执行中断处理程序。这是中断上半部，中断上半部执行要快，而且不可睡眠。</p>
+<p>这样的话，一些非时间必要的任务可以挪到下半部稍后执行。下半部有四种机制：软中断，tasklet，工作队列，定时器。定时器之后再说，其他三个的工作机制和特点也足够清晰。</p>
+<p>​    相信通过这两章的学习，中断在我们面前就足以清晰了。</p>
+<h4 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h4><ul>
+<li>《Linux内核设计与实现》</li>
+</ul>
+]]></content>
+      <categories>
+        <category>操作系统</category>
+      </categories>
+      <tags>
+        <tag>中断</tag>
+      </tags>
   </entry>
   <entry>
     <title>死锁</title>
@@ -456,7 +894,527 @@
   <entry>
     <title>进程管理</title>
     <url>/posts/852cfab6/</url>
-    <content><![CDATA[]]></content>
+    <content><![CDATA[<blockquote>
+<p>本篇文章主要讲述的是操作系统的进程管理部分。进程管理部分包括进程的数据结构，进程状态与创建终止过程，进程之间的通信，进程调度方法，线程和内核同步等知识点。</p>
+</blockquote>
+<h3 id="进程管理"><a href="#进程管理" class="headerlink" title="进程管理"></a>进程管理</h3><h4 id="进程概念"><a href="#进程概念" class="headerlink" title="进程概念"></a>进程概念</h4><ul>
+<li>进程概念：<strong>进程是处于执行期的程序以及相关的资源总称。</strong></li>
+<li>相关资源：打开的文件，挂起的信号，内核内部数据，处理器状态，内存地址空间和执行线程，以及用来存放全局变量的段。</li>
+<li>进程通过fork系统调用创建，exec函数创建新的地址空间，并把新的程序载入其中。 （<strong>fork实际上是由clone系统调用实现的</strong>） 最后程序通过exit系统调用终结进程并将其占用的资源释放掉。 <ul>
+<li><strong>子进程退出执行后被设置为僵尸状态，直到父进程调用wait获取子进程的终止状态</strong>（如果不获取，那么父进程的进程表项一直有这个子进程的信息。）</li>
+<li>子进程退出执行前父进程已经退出了，这样<strong>子进程变为孤儿进程</strong>，其父进程会变成init进程，而init进程会循环地wait已经退出的子进程，负责善后工作。</li>
+<li>如何解决僵尸进程？只要将其父进程kill掉，那么他们变成孤儿进程，再让init进程处理后事。</li>
+</ul>
+</li>
+</ul>
+<h4 id="进程描述符"><a href="#进程描述符" class="headerlink" title="进程描述符"></a>进程描述符</h4><ul>
+<li>进程描述符（数据类型为 <code>task_struct</code>) 包含了一个具体进程的所有信息。</li>
+<li>内核将进程描述符存放在一个双向循环链表中，这个链表叫做<strong>任务队列</strong>。</li>
+<li><code>task_struct</code>相对比较大，大约有1.7KB(32 bit机器上)，<strong>Linux通过slab分配器动态生成<code>task_struct</code>,<code>task_struct</code>存放在该进程的内核栈尾端的<code>thread_info</code>结构中。</strong></li>
+<li>要想提取<code>task_struct</code>， 直接在栈上调用<code>current_thread_info()-&gt;task</code>即可。</li>
+</ul>
+<h4 id="进程状态"><a href="#进程状态" class="headerlink" title="进程状态"></a>进程状态</h4><p>​    在进程fork之后，直到进程停止。进程总共有三种状态：<strong>就绪态、运行态、阻塞态。</strong></p>
+<ul>
+<li><p>进程的状态值存放在<code>task_struct</code>中的<code>state</code>域，如果想设置状态则执行<code>task-&gt;state = State</code></p>
+<p>state的值可以是<code>TASK_RUNNING</code>（运行态和就绪态）, <code>TASK_INTERRUPTIBLE</code>（可中断阻塞）,<code>TASK_UNINTERRUPTIBLE</code>（不可中断，如创建进程时）,<code>TASK_TRACED</code>（被其他进程追踪的进程）, <code>TASK_STOPPED</code>（进程停止执行）。</p>
+</li>
+<li><p>运行态：进程正在执行，即该进程正在占据CPU。（这是进程在用户空间执行的唯一可能状态，其他两个状态只能在内核空间存在）</p>
+</li>
+<li><p>就绪态：进程是可执行的，但是CPU被其他进程所占据着，这个时候进程在运行队列等待执行。</p>
+</li>
+<li><p>阻塞态：<strong>进程正在发生睡眠，等待某些条件的达成才能唤醒该进程。唤醒的进程转换到运行态</strong>。（但是也有在睡眠中的进程不可中断，不被其他因素影响。这种进程用得很少）</p>
+</li>
+</ul>
+<h4 id="进程上下文"><a href="#进程上下文" class="headerlink" title="进程上下文"></a>进程上下文</h4><p>​    程序是运行在进程上下文（context）中。上下文是指程序正常运行所需要的环境。抢占指的是在发生中断或者系统调用之后，在该进程还没有结束时就进行上下文切换执行另外一个进程。</p>
+<p><strong>上下文切换指的是进程的调度</strong>，大概分为三步：</p>
+<ol>
+<li><p>保存当前进程的上下文</p>
+</li>
+<li><p>恢复先前被抢占进程的已保存的上下文</p>
+</li>
+<li><p>将控制转移到新进程</p>
+</li>
+</ol>
+<p>至于进程调度的具体行为和算法<code>schedule()</code>，后文再说。</p>
+<h4 id="进程创建"><a href="#进程创建" class="headerlink" title="进程创建"></a>进程创建</h4><p>Unix的进程创建分为两步： fork() , exec()</p>
+<ul>
+<li><p>fork 通过拷贝当前进程生成一个子进程。父子进程的区别仅仅在于PID和PPID，某些资源和统计量（如挂起的信号，子进程没有必要继承）</p>
+</li>
+<li><p>exec 负责读取可执行文件并将其载入地址空间开始运行。</p>
+</li>
+<li><p>写时拷贝（copy on write）： 这是在fork函数中使用的一种可以推迟甚至免除拷贝的技术。只有在需要写入的时候，数据才会被复制，从而使各个进程拥有各自的拷贝。但是如果该页没有被写入的情况下，不会拷贝。</p>
+<p><strong>（如果fork之后直接接exec，那就不会复制）</strong></p>
+</li>
+<li><p>fork的实际开销就是复制父进程的页表以及给子进程创建唯一的进程描述符。</p>
+</li>
+</ul>
+<p>Linux通过clone系统调用来实现fork的，clone再去调用<code>do_fork()</code></p>
+<ul>
+<li><p>do_fork 完成了创建中的大部分工作。该函数调用copy_process()函数，然后让进程开始运行。</p>
+<p>copy_process() 流程：</p>
+<ul>
+<li>调用<code>dup_task_strcut()</code>为<strong>新进程创建一个内核栈，thread_info结构和task_struct</strong>，这些值与当前进程相同。此时两个进程描述符是相同的。</li>
+<li>检查并确保新创建这个子进程后，用户拥有进程的数量没有超过给它分配的资源限制。</li>
+<li>子进程开始使自己与父进程区别开来，将进程描述符内的一些成员初始化。但是大部分成员依旧未修改。</li>
+<li>子进程状态被设置为 <code>TASK_UNINTERRUPTIBLE</code>（不可中断），保证其不会运行。</li>
+<li>调用copy_flags()更新task_struct中的flags成员。</li>
+<li>调用alloc_pid()为新进程分配一个pid</li>
+<li>根据传递给clone()的参数标志，copy_process()<strong>拷贝或共享</strong>打开的文件、文件系统信息、信号处理函数、进程地址空间和命名空间等。（一般来说，进程中的所有线程共享资源，但是不同进程就只能拷贝资源）</li>
+<li>最后扫尾工作并返回一个指向子进程的指针。</li>
+</ul>
+</li>
+</ul>
+<h4 id="Linux中线程实现"><a href="#Linux中线程实现" class="headerlink" title="Linux中线程实现"></a>Linux中线程实现</h4><p>​    线程机制同样是现代编程技术中常用的一种抽象概念。该机制提供了再同一程序内共享内存地址空间运行的一组线程。线程机制支持并发程序设计技术，在多核中，实现了真正的并行处理。</p>
+<p>​    从Linux内核来看，没有线程这个概念。所有的线程都是当做进程来实现的，<strong>线程只是一个被视为与其他进程共享某些资源的进程</strong>。每个线程也有一个task_struct。</p>
+<p>创建线程：线程的创建和普通进程的创建类似。只不过调用clone()的时候需要传递一些额外的参数。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 进程的创建：fork</span></span><br><span class="line">clone(SIGCHLD, <span class="number">0</span>);</span><br><span class="line"><span class="comment">// 线程的创建：</span></span><br><span class="line">clone(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND, <span class="number">0</span>);</span><br><span class="line">这些标志决定了新创建进程的行为方式和父子进程之间共享的资源种类</span><br></pre></td></tr></table></figure>
+
+<p>内核线程：独立运行在内核空间的标准进程。 内核线程和普通进程间的区别在于<strong>内核线程没有独立的地址空间。只能在内核中运行，不能切换到用户空间中</strong>。只能被内核线程创建。但是和普通进程一样，可以被调度，也可以被抢占。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ps -ef // 可以查看内核线程</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="进程终结"><a href="#进程终结" class="headerlink" title="进程终结"></a>进程终结</h4><p>当进程终结时，内核必须释放它所占用的资源并且将此消息告知给父进程。</p>
+<p>进程主动或者被动调用exit时，进程会调用do_exit()函数，该函数执行完将进程相关联的所有资源都被释放掉，进程不可运行并且处于EXIT_ZOMBIE状态。<strong>它所占有的内存就是内核栈、thread_info结构和task_struct结构</strong>。此时这个进程存在的唯一目的就是向它的父进程提供信息。（这是僵死状态）</p>
+<p>父进程执行wait函数之后，等待子进程退出。子进程执行完exit，父进程检索到信息后，然后释放进程描述符，进程的所有内存都被释放，归还给系统使用。</p>
+<p>​    </p>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>在本章中，我们介绍了操作系统的核心概念——进程。</p>
+<p>首先我们讨论了进程的一般特性，进程与线程之间的区别，如何创建进程(clone)，如何把新的执行映像装入到地址空间(exec)，如何表示进程的层次关系，父进程优势如何收集其后代的信息(wait)，以及进程如何消亡(exit)。</p>
+<p>下一章进程调度。内核以何种方式决定那个进程运行，何时运行，以何种顺序执行？</p>
+<h3 id="进程调度"><a href="#进程调度" class="headerlink" title="进程调度"></a>进程调度</h3><p>当系统中可运行的进程数量大于处理器的个数时，我们要进行进程调度。</p>
+<p>进程调度是指将合适的进程运行，并在一定时间内占用CPU。合理的调度程序，能够使系统资源发挥更大的作用，多进程才会有并发执行的效果。<strong>什么是合适的进程？一定的时间是多少时间？</strong>这些都是进程调度考虑的因素。</p>
+<h4 id="多任务"><a href="#多任务" class="headerlink" title="多任务"></a>多任务</h4><p>多任务操作系统是能同时并发地交互执行多个进程的操作系统。如果是单处理器，不管进程有多少个，正在运行的数量最多只有1个。</p>
+<p>多任务系统可以划分为两类：非抢占式多任务和抢占式多任务。</p>
+<p>在非抢占式多任务模式下，进程一旦运行。占据CPU之后，其他进程一定得等该进程结束，<strong>主动让出CPU之后才能运行。</strong></p>
+<p>抢占式多任务模式下，由调度程序来决定什么时候停止一个进程的运行，以便其他进程能够得到执行的机会。<strong>这个强制挂起的动作就叫做抢占。</strong>进程在被抢占之前能够运行在CPU的时间叫做进程的时间片，是<strong>预先设定好的</strong>。现代操作系统对程序运行都采用动态时间片计算的方式，并且引入了可配置的计算策略。</p>
+<h4 id="Linux的进程调度"><a href="#Linux的进程调度" class="headerlink" title="Linux的进程调度"></a>Linux的进程调度</h4><p>linux系统在内核2.5之后引入了一个新的O(1)调度程序，并在此程序下优化，得到了一个新的调度器：<strong>完全公平调度器(CFS)</strong></p>
+<p>接下来我们主要是在讲CFS算法。</p>
+<h4 id="策略"><a href="#策略" class="headerlink" title="策略"></a>策略</h4><p>讲调度算法之前，我们先来了解调度器的策略。策略决定调度程序在何时让什么进程运行。针对不同的进程，其调度策略也不一样。</p>
+<ul>
+<li><p>I/O消耗型进程：此类进程在大部分时间用来提交I/O请求或者等待I/O请求。因此，这样的进程<strong>常常处于运行状态，但是运行的时间很短</strong>。因为它在等待更多的I/O请求时最后总是会阻塞。</p>
+<p>针对此类进程的调度策略是增加进程调度频率，但是减少进程时间片时间。</p>
+</li>
+<li><p>CPU消耗型进程：此类进程把时间大多用在执行代码上。除非被强占，这样的进程一般都是一直在运行。<strong>所以从响应速度考虑，调度器不能让经常一直运行</strong>。</p>
+<p>针对此类进程的调度策略是降低进程调度频率，但是增加进程时间片时间。</p>
+</li>
+<li><p>当然实际上有两者都具备的进程，这样的话调度策略似乎更难一点。调度策略通常要在两个矛盾的目标中寻找平衡：<strong>进程响应迅速（响应时间短）和最大系统利用率（高吞吐量）。</strong> 因此调度程序通常采用一套很复杂的算法来实现调度策略。不过我们大概把握住这点，linux为了保证交互式应用和桌面系统的性能，对进程的响应做了优化，<strong>更倾向于优先调度I/O消耗型的进程。</strong></p>
+</li>
+</ul>
+<p>下面再介绍一些专业词汇</p>
+<ul>
+<li><p>进程优先级：调度算法最基本的一类就是基于进程优先级来调度。通常做法（Linux未采用）优先级高的先执行，优先级低的后执行；优先级相同的轮询执行。</p>
+<p>Linux采用两种方式来设置优先级</p>
+<ul>
+<li>第一种是nice值(-20~ +19)：默认值为0，<strong>nice值越大优先级越低</strong></li>
+<li>第二种是实时优先级，其值是可配置的：默认情况下是[0-99]，<strong>数值越大优先级越高</strong>。</li>
+</ul>
+</li>
+<li><p>时间片：时间片是一个数值，它表明进程在被抢占前所能持续运行的时间。时间片需要提前设置。一般来说I/O消耗型希望时间片短，CPU消耗希望时间片长。</p>
+</li>
+</ul>
+<h4 id="Linux调度算法"><a href="#Linux调度算法" class="headerlink" title="Linux调度算法"></a>Linux调度算法</h4><p>Linux调度器是通过模块的方式提供的，这样做为了是允许不同类型的进程可以有针对性的选择调度算法。</p>
+<p><strong>进程可以分为普通进程和实时进程。普通进程使用的调度算法就是CFS；实时进程由于其需要实时响应，因此优先级高，之后在讨论。</strong></p>
+<p>在Unix系统中用到的调度算法还是基于时间片和优先级的。但是这种算法有个本质的问题：<strong>分配绝对的时间片引发的固定的切换频率，给公平性造成了很大的变数。</strong>在这里CFS完全摒弃了时间片而是<strong>分配给进程一个处理器使用比重。</strong></p>
+<p>CFS做法：<strong>允许每个进程运行一段时间、循环轮转、选择运行最少的进程作为下一个运行进程。CFS在所有可运行进程总数基础上计算出一个进程应该运行多久，而不是给一个绝对的时间片。</strong></p>
+<p>其实这里还是用到了nice值，但是不是像之前的那样使用绝对的nice值，而是使用<strong>nice差值（进程A nice = 0， 进程B nice = 5 和 进程A nice = 15 进程B nice = 20</strong>二者的CPU时间分配是一样的。nice值对时间片的作用不再是算数加权，而是<strong>几何加权</strong>。</p>
+<blockquote>
+<p>总结下CFS调度算法特点：（相对的时间片概念）</p>
+<ul>
+<li>不是给一个绝对的时间片，而是给一个相对的nice值。</li>
+<li>这个nice值是进程之间的nice差值，对时间片的作用是几何加权。</li>
+</ul>
+</blockquote>
+<h4 id="Linux调度的实现"><a href="#Linux调度的实现" class="headerlink" title="Linux调度的实现"></a>Linux调度的实现</h4><p>调度器实体的数据结构是进程描述符 <code>task_struct</code>中的<code>struct sched_entity</code></p>
+<p>完全公平调度（CFS）算法的实现可以分为四个组成部分</p>
+<ul>
+<li><p><strong>时间记账</strong>：所有调度器都必须对进程运行时间做记账，这个记账相当于时间片，当记账值为0，则可以被抢占。</p>
+<ul>
+<li>虚拟实时：<code>sched_entity</code>中的<code>vruntime</code>变量存放进程的虚拟运行时间，<strong>该运行时间的计算是经过了所有可运行进程数的标准化。</strong>该事件是以ns为单位的，与定时器节拍不再相关。CFS使用该变量来记录一个程序到底运行了多长时间以及它还能运行多久。</li>
+<li><code>update_curr()</code>:该函数是由<strong>系统定时器周期性调用</strong>的，该函数计算了当前进程的执行时间，并将其放入<code>delta_exec</code>变量中。这样通过这两个变量，不过是进程处于那种状态，都能够准确测量出给定进程运行时间，而且可知道谁应是下一个运行的进程。</li>
+</ul>
+</li>
+<li><p><strong>进程选择</strong>：CFS调度算法的核心：<strong>当CFS需要选择下一个运行进程时，它会挑一个具有最小<code>vruntime</code>的进程</strong>。那么如何选择这个进程呢？</p>
+<p><strong>CFS使用红黑树来组织可运行进程队列，这样可以迅速找到最小<code>vruntime</code>的进程</strong>。</p>
+<ul>
+<li><p>挑选下一个任务： 运行红黑树中最左边叶子节点所代表的进程。 使用 <code>__pick_next_entity()</code></p>
+</li>
+<li><p>向树中加入进程：进程变为可运行状态时，加入红黑树。使用<code>__enqueue_entity()</code></p>
+</li>
+<li><p>从树中删除进程：进程变为阻塞或终止时，从红黑树删除。使用<code>__dequeue_entity()</code></p>
+</li>
+</ul>
+<p>这些操作都要熟悉红黑树才能理解。</p>
+</li>
+<li><p>调度器入口： <code>schedule()</code>，该函数是找到可运行的最高优先级进程，然后调度它。</p>
+</li>
+<li><p>休眠和唤醒：进程处于休眠状态需要将其从可执行红黑树中移除，然后加入<strong>等待队列</strong>。然后调用<code>schedule()</code>选择和执行一个其他进程。唤醒操作语气相反。</p>
+<p>等待队列是一个简单链表。休眠和唤醒操作记得要考虑<strong>竞争条件</strong>。</p>
+</li>
+</ul>
+<h4 id="抢占和上下文切换"><a href="#抢占和上下文切换" class="headerlink" title="抢占和上下文切换"></a>抢占和上下文切换</h4><p>上下文切换就是从一个可执行进程切换到另一个可执行进程。由函数<code>context_switch()</code>执行。该函数完成了以下两项基本工作。</p>
+<ul>
+<li><p>调用声明在<code>&lt;asm/mmu_context.h&gt;</code>中的<code>switch_mm()</code>,该函数负责把<strong>虚拟内存</strong>从上一个进程映射切换到新进程中。</p>
+</li>
+<li><p>调用声明在<code>&lt;asm/system&gt;</code>中的<code>switch_to()</code>,该函数负责从上一个进程的<strong>处理器状态</strong>切换到新进程的处理器状态。这包括保存、恢复栈信息和寄存器信息，还有一些与体系结构相关的状态信息。</p>
+</li>
+</ul>
+<p>内核必须知道在什么时候调用<code>schedule()</code>。内核提供了一个<code>need_resched</code>标志来表明是否需要重新执行一次调度。当某个进程应该被抢占时，一些函数会设置这个标志，然后内核检查该标志被设置，调用<code>schedule()</code>来切换到新的进程。</p>
+<p>抢占：</p>
+<ul>
+<li><p><strong>用户抢占</strong>：这个可以理解为在用户空间中进程对CPU进行抢占。在内核即将返回用户空间时，<code>need_resched</code>标志被设置，这个时候会调用<code>schedule()</code>.（这个时候内核会选择一个其他更合适的进程投入运行）</p>
+<p>简而言之：用户抢占发生在以下情况：</p>
+<ul>
+<li>从系统调用返回用户空间时</li>
+<li>从中断处理程序返回用户空间时</li>
+</ul>
+</li>
+<li><p><strong>内核抢占</strong>：指一个在内核态运行的进程，可能在执行内核函数期间被另一个进程取代。（这要求重新调度室安全的，即正在执行的进程代码<strong>是没有持有锁的</strong>。）</p>
+<p>简而言之：内核抢占会发生在：</p>
+<ul>
+<li>中断处理程序正在执行，且返回用户空间之前</li>
+<li>内核代码再一次具有抢占性的时候</li>
+<li>如果内核中的进程显示调用<code>schedule()</code></li>
+<li>如果内核中进程阻塞（也会调用<code>schedule()</code>）</li>
+</ul>
+</li>
+</ul>
+<h4 id="实时调度策略"><a href="#实时调度策略" class="headerlink" title="实时调度策略"></a>实时调度策略</h4><p>​    实时调度策略是针对实时进程的。<strong>实时进程因为优先级都较高，所以采用的是静态优先级。内核不为实时进程计算动态优先级。这样能保证给定优先级别的实时进程总能抢占优先级比它低的进程。</strong></p>
+<p>​    如果是普通进程，其调度策略是<code>SCHED_NORMAL</code>,就是上面提到的那种。</p>
+<p>采用的两种实时策略：</p>
+<ul>
+<li><code>SCHED_FIFO</code>:这个是简单的先入先出调度算法：<strong>它不使用时间片</strong>。处于可运行状态的<code>SCHED_FIFO</code>一定比<code>SCHED_NORMAL</code>更优先执行。<strong>由于不使用时间片，是非抢占的。只有优先级高的执行完，优先级低的才能执行。</strong></li>
+<li><code>SCHED_RR</code>: 这个和上面那个大体相同，但是这个是有时间片的。时间片耗完就得重新调度。<strong>时间片只用来重新调度同一优先级的进程。</strong></li>
+<li>两者优先级调度都采用的是高优先级先调度，同一优先级的轮流调度。</li>
+</ul>
+<h4 id="调度相关系统调用"><a href="#调度相关系统调用" class="headerlink" title="调度相关系统调用"></a>调度相关系统调用</h4><p>​    Linux提供一个系统调用族，用于管理与调度程序相关的参数。这些系统调用可以用来操作、处理进程优先级、调度策略及处理器绑定。这些都在下一章会讲。</p>
+<p>​    不过这里有个<code>sched_yield()</code>系统调用，能够让该进程自动放弃CPU，放弃的进程加入过期队列中，这样该进程在一段时间内都不会再被执行了。</p>
+<h4 id="小结-1"><a href="#小结-1" class="headerlink" title="小结"></a>小结</h4><p>​    进程调度程序是内核的重要组成部分。Linux新的CFS调度算法要掌握。</p>
+<h3 id="进程通信"><a href="#进程通信" class="headerlink" title="进程通信"></a>进程通信</h3><p>进程经常需要与其他进程通信。进程通信中一般伴有三个需要处理的问题：</p>
+<ul>
+<li>一个进程如何把信息传递给另一个</li>
+<li>确保两个或多个进程在关键活动中不会交叉</li>
+<li>进程执行的正常顺序</li>
+</ul>
+<p>这三个问题中的第二第三个问题对于线程也同样适用。第一个问题线程很简单，因为线程共享一个地址空间和拥有全局变量。但另外两个问题同样适用于线程。</p>
+<p>本小节只注意第一个问题，至于二三个问题放在内核同步中去讲。</p>
+<p>进程间的通信方式有以下几种</p>
+<ul>
+<li>匿名管道</li>
+<li>命名管道</li>
+<li>消息队列</li>
+<li>信号量</li>
+<li>信号</li>
+<li>共享内存</li>
+<li>套接字</li>
+</ul>
+<h4 id="管道"><a href="#管道" class="headerlink" title="管道"></a>管道</h4><p>管道分为匿名管道和命名管道，二者的区别如下</p>
+<ul>
+<li>匿名管道只能在具有亲子关系的进程间进行通信</li>
+<li>命名管道可以在无亲子关系的进程间进行通信</li>
+</ul>
+<p>这里来简单描述下匿名管道的步骤。</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 通过pipe()函数来创建匿名管道</span></span><br><span class="line"><span class="comment">// 返回值：成功返回0，失败返回-1</span></span><br><span class="line"><span class="comment">// fd参数返回两个文件描述符</span></span><br><span class="line"><span class="comment">// fd[0]指向管道的读端，fd[1]指向管道的写端</span></span><br><span class="line"><span class="comment">// fd[1]的输出是fd[0]的输入。</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">pipe</span><span class="params">(<span class="keyword">int</span> fd[<span class="number">2</span>])</span></span>;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>父进程创建管道，得到<strong>两个⽂件描述符</strong>指向管道的两端</li>
+<li>父进程fork出子进程，⼦进程也有<strong>两个⽂件描述符</strong>指向同⼀管道。</li>
+<li><strong>父进程关闭fd[0],子进程关闭fd[1]，即⽗进程关闭管道读端,⼦进程关闭管道写端（因为管道只支持单向通信）。⽗进程可以往管道⾥写,⼦进程可以从管道⾥读,管道是⽤环形队列实现的,数据从写端流⼊从读端流出,这样就实现了进程间通信。</strong></li>
+</ul>
+<p><strong>总结来说，管道是一种简单的进程通信方式。它是一种半双工的通信方式，数据只能单向流动</strong>。而且流动二字意味着管道其实是个字节流方法。</p>
+<h4 id="消息队列"><a href="#消息队列" class="headerlink" title="消息队列"></a>消息队列</h4><p>消息队列，<strong>就是一个消息的链表，是一系列保存在内核中消息的列表</strong>。<strong>用户进程可以向消息队列添加消息，也可以向消息队列读取消息</strong>。</p>
+<p>消息队列与管道通信相比，其优势是对<strong>每个消息指定特定的消息类型，接收的时候不需要按照队列次序，而是可以根据自定义条件接收特定类型的消息</strong>。</p>
+<p>可以把消息看做一个记录，具有特定的格式以及特定的优先级。对消息队列有写权限的进程可以向消息队列中按照一定的规则添加新消息，对消息队列有读权限的进程可以从消息队列中读取消息。</p>
+<p>进程通过消息队列通信，主要是：</p>
+<ul>
+<li>创建或打开消息队列</li>
+<li>添加消息</li>
+<li>读取消息</li>
+<li>控制消息队列</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>msgget</code></td>
+<td>创建或打开消息队列</td>
+</tr>
+<tr>
+<td><code>msgsnd</code></td>
+<td>添加消息</td>
+</tr>
+<tr>
+<td><code>msgrcv</code></td>
+<td>读取消息</td>
+</tr>
+<tr>
+<td><code>msgctl</code></td>
+<td>控制消息队列</td>
+</tr>
+</tbody></table>
+<h4 id="信号"><a href="#信号" class="headerlink" title="信号"></a>信号</h4><p>信号其实是进程向内核发生一个系统调用，然后该系统调用再让内核去和另外一个进程进行通信。</p>
+<h4 id="信号量"><a href="#信号量" class="headerlink" title="信号量"></a>信号量</h4><p>信号量的话放在内核同步中去讲。</p>
+<h4 id="共享内存"><a href="#共享内存" class="headerlink" title="共享内存"></a>共享内存</h4><p>共享内存允许两个或多个进程共享一个给定的存储区，<strong>这一段存储区可以被两个或两个以上的进程映射至自身的地址空间中，一个进程写入共享内存的信息，可以被其他使用这个共享内存的进程，通过一个简单的内存读取错做读出，从而实现了进程间的通信。</strong></p>
+<p>采用共享内存进行通信的一个主要好处是<strong>效率高</strong>，因为进程可以直接读写内存，而不需要任何数据的拷贝，<strong>对于像管道和消息队里等通信方式，则需要再内核和用户空间进行四次的数据拷贝，而共享内存则只拷贝两次：一次从输入文件到共享内存区，另一次从共享内存到输出文件。</strong>因为管道这些都借助了内核，需要内核和用户态之间进行数据拷贝，这样一来就多了两次。</p>
+<p>一般而言，进程之间在共享内存时，并不总是读写少量数据后就解除映射，有新的通信时在重新建立共享内存区域；而是保持共享区域，直到通信完毕为止，这样，数据内容一直保存在共享内存中，并没有写回文件。共享内存中的内容往往是在解除映射时才写回文件，因此，采用共享内存的通信方式效率非常高。</p>
+<p>共享内存的两种实现方式：</p>
+<ul>
+<li>内存映射</li>
+<li>共享内存机制</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mmap</code></td>
+<td>建立共享内存映射</td>
+</tr>
+<tr>
+<td><code>munmap</code></td>
+<td>解除共享内存映射</td>
+</tr>
+<tr>
+<td><code>shmget</code></td>
+<td>获取共享内存区域的ID</td>
+</tr>
+<tr>
+<td><code>shmat</code></td>
+<td>建立映射共享内存</td>
+</tr>
+<tr>
+<td><code>shmdt</code></td>
+<td>解除共享内存映射</td>
+</tr>
+</tbody></table>
+<h4 id="套接字"><a href="#套接字" class="headerlink" title="套接字"></a>套接字</h4><p>套接字也是一种信号通信方式，这种方法一般用于不同主机之间的进程通信。因此套接字编程又称为网络编程，这个会在网络编程分类中详细的讲，这里便省略。</p>
+<h3 id="内核同步介绍"><a href="#内核同步介绍" class="headerlink" title="内核同步介绍"></a>内核同步介绍</h3><p>总所周知，多个线程在访问和操作共享资源的时候，叫做并发访问。并发访问很有可能发生各个线程之间相互覆盖共享数据的状态，这样导致被访问数据不一致的状态。要想防止并发访问带来的问题，我们要学会同步。这一章我们来介绍内核同步。</p>
+<h4 id="单处理器并发"><a href="#单处理器并发" class="headerlink" title="单处理器并发"></a>单处理器并发</h4><p>​    在只有单处理器的时候，<strong>只有在中断发生的时候，或者在内核明确请求重新调度、执行另一个任务的时候，数据才可能并发访问</strong>，这样一来其实防止并发非常简单。只需要注意重新调度和中断即可。</p>
+<p>​    这种并发称之为<strong>伪并发执行</strong>。以下是一些单CPU下的伪并发</p>
+<ul>
+<li><p>中断：中断能够随时打断当前的代码。</p>
+</li>
+<li><p>软中断和tasklet：内核能在任何时候唤醒或调度软中断和tasklet</p>
+</li>
+<li><p>内核抢占：内核具有抢占性</p>
+</li>
+<li><p>睡眠及用户空间的同步：进程睡眠之后的重新调度。</p>
+<p>上面这四种如果在多处理器上的话可能还是真正的并发。</p>
+</li>
+<li><p>堆成多处理：多处理器下同时访问相同一段代码。</p>
+</li>
+</ul>
+<h4 id="临界区和竞争条件"><a href="#临界区和竞争条件" class="headerlink" title="临界区和竞争条件"></a>临界区和竞争条件</h4><ul>
+<li>临界区：访问和操作共享数据的代码段</li>
+<li>竞争条件：<strong>多个执行线程（进程/线程/中断处理程序）并发（并行）访问共享资源</strong>，因为执行顺序不一样造成结果不一样的情况，称为竞争条件</li>
+<li>同步：避免并发和防止竞争条件称为同步。</li>
+</ul>
+<h4 id="原子性的理解"><a href="#原子性的理解" class="headerlink" title="原子性的理解"></a>原子性的理解</h4><p>原子变量：在硬件方面是使用<strong>锁总线</strong>的方式（最新的可能会有变化）来实现指令连续执行而不被打断。</p>
+<p><strong>锁总线的效果非常低效，现在是通过阻塞其它CPU核对相关内存的缓存块访问来实现原子操作。</strong></p>
+<p>这里可以看<a href="https://zhuanlan.zhihu.com/p/33445834%E8%BF%99%E4%B8%AA%E5%9B%9E%E7%AD%94%E3%80%82">https://zhuanlan.zhihu.com/p/33445834这个回答。</a></p>
+<h4 id="加锁"><a href="#加锁" class="headerlink" title="加锁"></a>加锁</h4><p>​    为了让临界区不被多线程并发访问，内核实现了锁的机制。这种机制确保A线程标记访问临界区时，其它线程禁止访问该临界区。加锁能够实现以串行方式对资源进行访问，不过这样同时会降低系统的性能。</p>
+<p>​    锁有各种各样的实现形式，锁的各种机制的区别主要在于：当锁已经被其他线程持有，因而不可用时的表现：</p>
+<ul>
+<li>一些锁被争用时会简单的<strong>执行忙等待</strong>（自旋锁）</li>
+<li>一些锁被争用时会使<strong>当前任务睡眠</strong>知道锁可用为止（信号量）</li>
+</ul>
+<p>加锁这个问题要在设计代码的时候就要考虑。这个问题特别难。</p>
+<h4 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h4><p>死锁就是<strong>一个或多个线程和一个或多个资源，每个线程都在等待一个资源，但是所有资源都被占用了。这样导致所有线程都在相互等待，而且不会释放已经占有的资源。</strong></p>
+<p>最简单的死锁：自死锁（递归调用非递归锁）</p>
+<p>如何避免死锁：</p>
+<ul>
+<li>按顺序加锁</li>
+<li>防止发生饥饿，即最好不要出现线程一直等待的现象。</li>
+<li>不要重复请求同一个锁</li>
+<li>设计方案尽可能简单。</li>
+</ul>
+<h4 id="争用和扩展性"><a href="#争用和扩展性" class="headerlink" title="争用和扩展性"></a>争用和扩展性</h4><p>​    争用是指当锁正在被占用时，有其他线程试图获得该锁。如果有多个线程都在试图获得这个锁，那就说明该锁正在被高度争用。这样的话会极大的降低系统的性能。</p>
+<p>​    当锁的争用问题变得严重的时候，设计就向更加惊喜的加锁方向进化。加锁从全局锁精化到了每个处理器都有自己的锁，这样的话扩展性大大的增强了。</p>
+<p>​    扩展性是指系统在扩展的时候能够使性能尽可能的高。内核加锁的粒度很细，这样的话扩展性也会更好。CFS调度器也进一步提升了锁的可扩展性。</p>
+<h3 id="内核同步方法"><a href="#内核同步方法" class="headerlink" title="内核同步方法"></a>内核同步方法</h3><p>​    上一章讨论了竞争条件的产生以及如何去解决。这一章我们来介绍Linux内核提供的同步方法。</p>
+<h4 id="原子操作"><a href="#原子操作" class="headerlink" title="原子操作"></a>原子操作</h4><p>​    原子操作是其他同步操作的基石。原子操作保证指令在执行过程中不被打断。</p>
+<p>​    原子操作的本来意思是指在一个时钟周期内完成的操作，这样就不可能被打断。</p>
+<ul>
+<li>实现原子操作原理：（使用<strong>Volatile</strong>关键字）<ul>
+<li>最早是通过汇编指令LOCK，CPU锁总线，直到该指令完成之后在释放总线。</li>
+<li>上一种效率很低，现在的话是<strong>LOCK只会阻塞其他cpu核对相关内存的缓存块的访问。</strong></li>
+</ul>
+</li>
+</ul>
+<p>（这里 Volatile 的作用是确保指令不会优化写入寄存器中，这样就防止了指令重排）</p>
+<ul>
+<li><p>原子操作对象</p>
+<ul>
+<li><p>原子整数操作：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 32 bits</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">atomic_t</span>&#123;</span></span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">int</span> counter;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 64 bits</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">atomic64_t</span>&#123;</span></span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">long</span> counter;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+<li><p>原子位操作：没有对象，只有一些接口。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">set_bit</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span>* addr)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">clear_bit</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span>* addr)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">change_bit</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span>* addr)</span></span>;</span><br><span class="line"><span class="comment">// ...</span></span><br></pre></td></tr></table></figure>
+
+<p>为什么要有原子位操作？</p>
+<p>因为对位进行操作不是原子的，而是有两个步骤</p>
+<ul>
+<li>先对某位置位，然后清0。（置位操作和清除操作顺序可能不一样）。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="自旋锁"><a href="#自旋锁" class="headerlink" title="自旋锁"></a>自旋锁</h4><p>​    自旋锁是Linux中最常见的锁。</p>
+<p>​    自旋锁只能被一个可执行线程持有。<strong>如果一个执行线程试图获得已经持有的自旋锁，那么该线程会一直进行忙循环——旋转——等待锁重新可用。</strong>这也是自旋锁的最大特点。</p>
+<ul>
+<li><p>自旋锁的特点：</p>
+<ul>
+<li>自旋锁只适用于短时间内的轻量级加锁（因为一旦自旋，处理器会一直循环等待）</li>
+<li><strong>自旋锁是不可递归的！重复加同一个锁也会自旋！</strong></li>
+<li>自旋锁可以在中断处理程序中。但是<strong>在中断处理程序中使用自旋锁一定要禁止本地中断（同一CPU上的中断）</strong></li>
+</ul>
+</li>
+<li><p>自旋锁操作：</p>
+<table>
+<thead>
+<tr>
+<th align="center">方法</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">spin_lock()</td>
+<td align="center">获取指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_lock_irq()</td>
+<td align="center"><strong>禁止本地中断</strong>并获取指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_lock_irqsave()</td>
+<td align="center">保存本地中断的状态，然后<strong>禁止本地中断</strong>并获取指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_unlock()</td>
+<td align="center">释放指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_unlock_irq()</td>
+<td align="center">释放指定的锁并<strong>激活本地中断</strong></td>
+</tr>
+<tr>
+<td align="center">spin_unlock_irqrestore()</td>
+<td align="center">释放指定的锁并让本地中断恢复到之前的状态</td>
+</tr>
+<tr>
+<td align="center">spin_lock_init()</td>
+<td align="center">动态初始化指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_trylock()</td>
+<td align="center">试图获取指定的锁，如果未获取，返回非0</td>
+</tr>
+<tr>
+<td align="center">spin_is_locked()</td>
+<td align="center">如果指定的锁正在被获取，返回非0</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>自旋锁和下半部</p>
+<p>由于三者的抢占关系： 中断处理程序 &gt; 下半部 &gt; 进程上下文。</p>
+<p>如果在进程上下文和下半部中共享数据，要<strong>禁止下半部</strong>，如果中断处理程序和下半部共享数据，要禁止中断。这些都要得到锁的保护。</p>
+</li>
+</ul>
+<ul>
+<li>读-写自旋锁</li>
+</ul>
+<p>​    Linux内核专门提供了读-写锁。不过在使用中如果对于读写分不太清还是用普通的自旋锁。</p>
+<p>​    在读写锁中，当读锁被持有时，写操作只能自旋等待，而读操作可以继续占用锁，这样的话会让写操作无限延迟。</p>
+<p>​    自旋锁提供的是一种快速简单的锁实现方法。<strong>适用于加锁时间不长并且代码不会睡眠（如中断处理程序），利用自旋锁是最佳选择。</strong>如果加锁时间长或者代码持有锁时可能会睡眠，那么用信号量。</p>
+<h4 id="信号量-1"><a href="#信号量-1" class="headerlink" title="信号量"></a>信号量</h4><p>​    Linux中的信号量是一个睡眠锁。<strong>当一个任务试图获得一个已经被占用的信号量时，信号量会将其推进一个等待队列，然后让其睡眠，这样处理器会重获自由，去处理其他代码。</strong></p>
+<ul>
+<li><p>与自旋锁的对比</p>
+<ul>
+<li>更好的利用了CPU利用率</li>
+<li><strong>开销比自旋锁大。</strong></li>
+<li>不能既占用信号量又占用自旋锁。</li>
+<li><strong>信号量可以同时允许任意数量的锁持有者</strong>，而自旋锁只能有一个。</li>
+</ul>
+</li>
+<li><p>计数信号量</p>
+<p>信号量可以同时允许任意数量的锁持有者这个特性是通过引用计数count来实现的。count是该信号量的使用数量。</p>
+</li>
+<li><p>二值信号量</p>
+<p>该类信号量的count只有0和1，这个和mutex有点像。</p>
+</li>
+</ul>
+<h4 id="互斥体Mutex"><a href="#互斥体Mutex" class="headerlink" title="互斥体Mutex"></a>互斥体Mutex</h4><p>​    <strong>Mutex是一个相对于信号量更为轻便的睡眠锁</strong>，这是个简化版信号量，<strong>没有引用计数。</strong></p>
+<p>​    Mutex不仅仅只是没有引用计数，而且还使用了<code>futex</code>机制。(futex不只在mutex中实现了，基本上linux上所有的线程同步都能够使用这个)</p>
+<ul>
+<li><p><code>futex</code>机制</p>
+<p><code>Futex</code>是一种用户态和内核态混合的同步机制。</p>
+<p>首先，同步的进程间通过<code>mmap</code>共享一段内存，**<code>futex</code>变量就位于这段共享的内存中且操作是原子<strong>的，当</strong>进程尝试进入互斥区或者退出互斥区的时候，先去查看共享内存中的futex变量，如果没有竞争发生，则只修改<code>futex</code>,而不用再执行系统调用了。当通过访问<code>futex</code>变量告诉进程有竞争发生，则还是得执行系统调用去完成相应的处理(wait 或者 wake up)。**</p>
+<p>简单的说，<code>futex</code>就是通过在<strong>用户态的检查，如果了解到没有竞争就不用陷入内核了</strong>，大大提高了low-contention时候的效率。</p>
+</li>
+<li><p>Mutex操作</p>
+<table>
+<thead>
+<tr>
+<th align="center">方法</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">mutex_lock(struct mutex *)</td>
+<td align="center">为指定的mutex上锁，如果锁不可用时则睡眠</td>
+</tr>
+<tr>
+<td align="center">mutex_unlock(struct mutex *)</td>
+<td align="center">为指定的mutex解锁</td>
+</tr>
+<tr>
+<td align="center">mutex_trylock(struct mutex *)</td>
+<td align="center">试图获取指定的mutex，成功返回1；如果锁被获取，返回0</td>
+</tr>
+<tr>
+<td align="center">mutex_is_locked(struct mutex *)</td>
+<td align="center">如果锁已被争用，则返回1，否则返回0</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>Mutex使用特点</p>
+<ul>
+<li> 任何时刻最多只能有一个任务持有mutex。</li>
+<li> <strong>当持有一个mutex时，进程不可以退出</strong>。</li>
+<li> mutex不能在中断和下半部使用，即使使用mutex_trylock()也不行。</li>
+<li> <strong>一般来说在同一进程上下文中加锁解锁。</strong></li>
+</ul>
+</li>
+</ul>
+<p><strong>对于互斥体和信号量，优先使用信号量</strong></p>
+<h4 id="顺序锁"><a href="#顺序锁" class="headerlink" title="顺序锁"></a>顺序锁</h4><p>​    通常简称seq锁。用于<strong>读写共享数据</strong>。这种锁的实现是依靠一个序列计数器。如果有疑义的数据被写入时，会得到一个锁，并且序列值会增加。当序列值为偶数，那代表加的锁都是读操作。如果是奇数，那么有写操作，优先执行写操作。</p>
+<p>该锁适用于</p>
+<ul>
+<li>数据读操作很多</li>
+<li>数据写操作很少</li>
+<li>写操作虽然很少但是优先读操作</li>
+<li>数据很简单</li>
+</ul>
+<p>使用这种锁的情况下有jiffies,该变量存储了Linux机器启动到当前时间。</p>
+<h4 id="禁止抢占"><a href="#禁止抢占" class="headerlink" title="禁止抢占"></a>禁止抢占</h4><p>​    内核是有抢占性的，内核中的进程在任何时候都可能停下来运行另外一个进程。这意味着一个任务和被强占的任务可能在同一临界区内运行。为了避免这种情况下，<strong>内核抢占代码使用自旋锁为非抢占区域，即禁止抢占</strong>。</p>
+<h4 id="屏障"><a href="#屏障" class="headerlink" title="屏障"></a>屏障</h4><p>​    barrier，保证了顺序性。因为编译器和处理器为了提高效率，可能对读和写重新排序，有些机器指令能够确保顺序要求（volatile），同时也可以指示编译器不要对指定点周围的指令序列进行重新排列。这些确保顺序的指令称作屏障。</p>
+]]></content>
+      <categories>
+        <category>操作系统</category>
+      </categories>
+      <tags>
+        <tag>进程管理</tag>
+        <tag>进程通信</tag>
+        <tag>线程</tag>
+        <tag>进程调度</tag>
+        <tag>内核同步</tag>
+      </tags>
   </entry>
   <entry>
     <title>Redis对象</title>

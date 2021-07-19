@@ -112,7 +112,7 @@
 
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="进程管理,进程通信,线程,进程调度,内核同步," />
 
 
 
@@ -123,16 +123,21 @@
 
 
 
-<meta name="description" content="汲取知识">
+<meta name="description" content="本篇文章主要讲述的是操作系统的进程管理部分。进程管理部分包括进程的数据结构，进程状态与创建终止过程，进程之间的通信，进程调度方法，线程和内核同步等知识点。  进程管理进程概念 进程概念：进程是处于执行期的程序以及相关的资源总称。 相关资源：打开的文件，挂起的信号，内核内部数据，处理器状态，内存地址空间和执行线程，以及用来存放全局变量的段。 进程通过fork系统调用创建，exec函数创建新的地址空">
 <meta property="og:type" content="article">
 <meta property="og:title" content="进程管理">
 <meta property="og:url" content="http://kromites.github.io/posts/852cfab6/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="汲取知识">
+<meta property="og:description" content="本篇文章主要讲述的是操作系统的进程管理部分。进程管理部分包括进程的数据结构，进程状态与创建终止过程，进程之间的通信，进程调度方法，线程和内核同步等知识点。  进程管理进程概念 进程概念：进程是处于执行期的程序以及相关的资源总称。 相关资源：打开的文件，挂起的信号，内核内部数据，处理器状态，内存地址空间和执行线程，以及用来存放全局变量的段。 进程通过fork系统调用创建，exec函数创建新的地址空">
 <meta property="og:locale">
 <meta property="article:published_time" content="2021-07-17T08:09:33.000Z">
-<meta property="article:modified_time" content="2021-07-17T12:01:48.867Z">
+<meta property="article:modified_time" content="2021-07-19T08:29:50.658Z">
 <meta property="article:author" content="Kromite">
+<meta property="article:tag" content="进程管理">
+<meta property="article:tag" content="进程通信">
+<meta property="article:tag" content="线程">
+<meta property="article:tag" content="进程调度">
+<meta property="article:tag" content="内核同步">
 <meta name="twitter:card" content="summary">
 
 
@@ -381,6 +386,28 @@
           </span>
 
           
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" itemprop="url" rel="index">
+                    <span itemprop="name">操作系统</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
 
           
             
@@ -412,7 +439,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  0
+                  9.5k
                 </span>
               
 
@@ -428,7 +455,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  1
+                  32
                 </span>
               
             </div>
@@ -449,7 +476,517 @@
       
 
       
-        
+        <blockquote>
+<p>本篇文章主要讲述的是操作系统的进程管理部分。进程管理部分包括进程的数据结构，进程状态与创建终止过程，进程之间的通信，进程调度方法，线程和内核同步等知识点。</p>
+</blockquote>
+<h3 id="进程管理"><a href="#进程管理" class="headerlink" title="进程管理"></a>进程管理</h3><h4 id="进程概念"><a href="#进程概念" class="headerlink" title="进程概念"></a>进程概念</h4><ul>
+<li>进程概念：<strong>进程是处于执行期的程序以及相关的资源总称。</strong></li>
+<li>相关资源：打开的文件，挂起的信号，内核内部数据，处理器状态，内存地址空间和执行线程，以及用来存放全局变量的段。</li>
+<li>进程通过fork系统调用创建，exec函数创建新的地址空间，并把新的程序载入其中。 （<strong>fork实际上是由clone系统调用实现的</strong>） 最后程序通过exit系统调用终结进程并将其占用的资源释放掉。 <ul>
+<li><strong>子进程退出执行后被设置为僵尸状态，直到父进程调用wait获取子进程的终止状态</strong>（如果不获取，那么父进程的进程表项一直有这个子进程的信息。）</li>
+<li>子进程退出执行前父进程已经退出了，这样<strong>子进程变为孤儿进程</strong>，其父进程会变成init进程，而init进程会循环地wait已经退出的子进程，负责善后工作。</li>
+<li>如何解决僵尸进程？只要将其父进程kill掉，那么他们变成孤儿进程，再让init进程处理后事。</li>
+</ul>
+</li>
+</ul>
+<h4 id="进程描述符"><a href="#进程描述符" class="headerlink" title="进程描述符"></a>进程描述符</h4><ul>
+<li>进程描述符（数据类型为 <code>task_struct</code>) 包含了一个具体进程的所有信息。</li>
+<li>内核将进程描述符存放在一个双向循环链表中，这个链表叫做<strong>任务队列</strong>。</li>
+<li><code>task_struct</code>相对比较大，大约有1.7KB(32 bit机器上)，<strong>Linux通过slab分配器动态生成<code>task_struct</code>,<code>task_struct</code>存放在该进程的内核栈尾端的<code>thread_info</code>结构中。</strong></li>
+<li>要想提取<code>task_struct</code>， 直接在栈上调用<code>current_thread_info()-&gt;task</code>即可。</li>
+</ul>
+<h4 id="进程状态"><a href="#进程状态" class="headerlink" title="进程状态"></a>进程状态</h4><p>​    在进程fork之后，直到进程停止。进程总共有三种状态：<strong>就绪态、运行态、阻塞态。</strong></p>
+<ul>
+<li><p>进程的状态值存放在<code>task_struct</code>中的<code>state</code>域，如果想设置状态则执行<code>task-&gt;state = State</code></p>
+<p>state的值可以是<code>TASK_RUNNING</code>（运行态和就绪态）, <code>TASK_INTERRUPTIBLE</code>（可中断阻塞）,<code>TASK_UNINTERRUPTIBLE</code>（不可中断，如创建进程时）,<code>TASK_TRACED</code>（被其他进程追踪的进程）, <code>TASK_STOPPED</code>（进程停止执行）。</p>
+</li>
+<li><p>运行态：进程正在执行，即该进程正在占据CPU。（这是进程在用户空间执行的唯一可能状态，其他两个状态只能在内核空间存在）</p>
+</li>
+<li><p>就绪态：进程是可执行的，但是CPU被其他进程所占据着，这个时候进程在运行队列等待执行。</p>
+</li>
+<li><p>阻塞态：<strong>进程正在发生睡眠，等待某些条件的达成才能唤醒该进程。唤醒的进程转换到运行态</strong>。（但是也有在睡眠中的进程不可中断，不被其他因素影响。这种进程用得很少）</p>
+</li>
+</ul>
+<h4 id="进程上下文"><a href="#进程上下文" class="headerlink" title="进程上下文"></a>进程上下文</h4><p>​    程序是运行在进程上下文（context）中。上下文是指程序正常运行所需要的环境。抢占指的是在发生中断或者系统调用之后，在该进程还没有结束时就进行上下文切换执行另外一个进程。</p>
+<p><strong>上下文切换指的是进程的调度</strong>，大概分为三步：</p>
+<ol>
+<li><p>保存当前进程的上下文</p>
+</li>
+<li><p>恢复先前被抢占进程的已保存的上下文</p>
+</li>
+<li><p>将控制转移到新进程</p>
+</li>
+</ol>
+<p>至于进程调度的具体行为和算法<code>schedule()</code>，后文再说。</p>
+<h4 id="进程创建"><a href="#进程创建" class="headerlink" title="进程创建"></a>进程创建</h4><p>Unix的进程创建分为两步： fork() , exec()</p>
+<ul>
+<li><p>fork 通过拷贝当前进程生成一个子进程。父子进程的区别仅仅在于PID和PPID，某些资源和统计量（如挂起的信号，子进程没有必要继承）</p>
+</li>
+<li><p>exec 负责读取可执行文件并将其载入地址空间开始运行。</p>
+</li>
+<li><p>写时拷贝（copy on write）： 这是在fork函数中使用的一种可以推迟甚至免除拷贝的技术。只有在需要写入的时候，数据才会被复制，从而使各个进程拥有各自的拷贝。但是如果该页没有被写入的情况下，不会拷贝。</p>
+<p><strong>（如果fork之后直接接exec，那就不会复制）</strong></p>
+</li>
+<li><p>fork的实际开销就是复制父进程的页表以及给子进程创建唯一的进程描述符。</p>
+</li>
+</ul>
+<p>Linux通过clone系统调用来实现fork的，clone再去调用<code>do_fork()</code></p>
+<ul>
+<li><p>do_fork 完成了创建中的大部分工作。该函数调用copy_process()函数，然后让进程开始运行。</p>
+<p>copy_process() 流程：</p>
+<ul>
+<li>调用<code>dup_task_strcut()</code>为<strong>新进程创建一个内核栈，thread_info结构和task_struct</strong>，这些值与当前进程相同。此时两个进程描述符是相同的。</li>
+<li>检查并确保新创建这个子进程后，用户拥有进程的数量没有超过给它分配的资源限制。</li>
+<li>子进程开始使自己与父进程区别开来，将进程描述符内的一些成员初始化。但是大部分成员依旧未修改。</li>
+<li>子进程状态被设置为 <code>TASK_UNINTERRUPTIBLE</code>（不可中断），保证其不会运行。</li>
+<li>调用copy_flags()更新task_struct中的flags成员。</li>
+<li>调用alloc_pid()为新进程分配一个pid</li>
+<li>根据传递给clone()的参数标志，copy_process()<strong>拷贝或共享</strong>打开的文件、文件系统信息、信号处理函数、进程地址空间和命名空间等。（一般来说，进程中的所有线程共享资源，但是不同进程就只能拷贝资源）</li>
+<li>最后扫尾工作并返回一个指向子进程的指针。</li>
+</ul>
+</li>
+</ul>
+<h4 id="Linux中线程实现"><a href="#Linux中线程实现" class="headerlink" title="Linux中线程实现"></a>Linux中线程实现</h4><p>​    线程机制同样是现代编程技术中常用的一种抽象概念。该机制提供了再同一程序内共享内存地址空间运行的一组线程。线程机制支持并发程序设计技术，在多核中，实现了真正的并行处理。</p>
+<p>​    从Linux内核来看，没有线程这个概念。所有的线程都是当做进程来实现的，<strong>线程只是一个被视为与其他进程共享某些资源的进程</strong>。每个线程也有一个task_struct。</p>
+<p>创建线程：线程的创建和普通进程的创建类似。只不过调用clone()的时候需要传递一些额外的参数。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 进程的创建：fork</span></span><br><span class="line">clone(SIGCHLD, <span class="number">0</span>);</span><br><span class="line"><span class="comment">// 线程的创建：</span></span><br><span class="line">clone(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND, <span class="number">0</span>);</span><br><span class="line">这些标志决定了新创建进程的行为方式和父子进程之间共享的资源种类</span><br></pre></td></tr></table></figure>
+
+<p>内核线程：独立运行在内核空间的标准进程。 内核线程和普通进程间的区别在于<strong>内核线程没有独立的地址空间。只能在内核中运行，不能切换到用户空间中</strong>。只能被内核线程创建。但是和普通进程一样，可以被调度，也可以被抢占。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ps -ef // 可以查看内核线程</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="进程终结"><a href="#进程终结" class="headerlink" title="进程终结"></a>进程终结</h4><p>当进程终结时，内核必须释放它所占用的资源并且将此消息告知给父进程。</p>
+<p>进程主动或者被动调用exit时，进程会调用do_exit()函数，该函数执行完将进程相关联的所有资源都被释放掉，进程不可运行并且处于EXIT_ZOMBIE状态。<strong>它所占有的内存就是内核栈、thread_info结构和task_struct结构</strong>。此时这个进程存在的唯一目的就是向它的父进程提供信息。（这是僵死状态）</p>
+<p>父进程执行wait函数之后，等待子进程退出。子进程执行完exit，父进程检索到信息后，然后释放进程描述符，进程的所有内存都被释放，归还给系统使用。</p>
+<p>​    </p>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>在本章中，我们介绍了操作系统的核心概念——进程。</p>
+<p>首先我们讨论了进程的一般特性，进程与线程之间的区别，如何创建进程(clone)，如何把新的执行映像装入到地址空间(exec)，如何表示进程的层次关系，父进程优势如何收集其后代的信息(wait)，以及进程如何消亡(exit)。</p>
+<p>下一章进程调度。内核以何种方式决定那个进程运行，何时运行，以何种顺序执行？</p>
+<h3 id="进程调度"><a href="#进程调度" class="headerlink" title="进程调度"></a>进程调度</h3><p>当系统中可运行的进程数量大于处理器的个数时，我们要进行进程调度。</p>
+<p>进程调度是指将合适的进程运行，并在一定时间内占用CPU。合理的调度程序，能够使系统资源发挥更大的作用，多进程才会有并发执行的效果。<strong>什么是合适的进程？一定的时间是多少时间？</strong>这些都是进程调度考虑的因素。</p>
+<h4 id="多任务"><a href="#多任务" class="headerlink" title="多任务"></a>多任务</h4><p>多任务操作系统是能同时并发地交互执行多个进程的操作系统。如果是单处理器，不管进程有多少个，正在运行的数量最多只有1个。</p>
+<p>多任务系统可以划分为两类：非抢占式多任务和抢占式多任务。</p>
+<p>在非抢占式多任务模式下，进程一旦运行。占据CPU之后，其他进程一定得等该进程结束，<strong>主动让出CPU之后才能运行。</strong></p>
+<p>抢占式多任务模式下，由调度程序来决定什么时候停止一个进程的运行，以便其他进程能够得到执行的机会。<strong>这个强制挂起的动作就叫做抢占。</strong>进程在被抢占之前能够运行在CPU的时间叫做进程的时间片，是<strong>预先设定好的</strong>。现代操作系统对程序运行都采用动态时间片计算的方式，并且引入了可配置的计算策略。</p>
+<h4 id="Linux的进程调度"><a href="#Linux的进程调度" class="headerlink" title="Linux的进程调度"></a>Linux的进程调度</h4><p>linux系统在内核2.5之后引入了一个新的O(1)调度程序，并在此程序下优化，得到了一个新的调度器：<strong>完全公平调度器(CFS)</strong></p>
+<p>接下来我们主要是在讲CFS算法。</p>
+<h4 id="策略"><a href="#策略" class="headerlink" title="策略"></a>策略</h4><p>讲调度算法之前，我们先来了解调度器的策略。策略决定调度程序在何时让什么进程运行。针对不同的进程，其调度策略也不一样。</p>
+<ul>
+<li><p>I/O消耗型进程：此类进程在大部分时间用来提交I/O请求或者等待I/O请求。因此，这样的进程<strong>常常处于运行状态，但是运行的时间很短</strong>。因为它在等待更多的I/O请求时最后总是会阻塞。</p>
+<p>针对此类进程的调度策略是增加进程调度频率，但是减少进程时间片时间。</p>
+</li>
+<li><p>CPU消耗型进程：此类进程把时间大多用在执行代码上。除非被强占，这样的进程一般都是一直在运行。<strong>所以从响应速度考虑，调度器不能让经常一直运行</strong>。</p>
+<p>针对此类进程的调度策略是降低进程调度频率，但是增加进程时间片时间。</p>
+</li>
+<li><p>当然实际上有两者都具备的进程，这样的话调度策略似乎更难一点。调度策略通常要在两个矛盾的目标中寻找平衡：<strong>进程响应迅速（响应时间短）和最大系统利用率（高吞吐量）。</strong> 因此调度程序通常采用一套很复杂的算法来实现调度策略。不过我们大概把握住这点，linux为了保证交互式应用和桌面系统的性能，对进程的响应做了优化，<strong>更倾向于优先调度I/O消耗型的进程。</strong></p>
+</li>
+</ul>
+<p>下面再介绍一些专业词汇</p>
+<ul>
+<li><p>进程优先级：调度算法最基本的一类就是基于进程优先级来调度。通常做法（Linux未采用）优先级高的先执行，优先级低的后执行；优先级相同的轮询执行。</p>
+<p>Linux采用两种方式来设置优先级</p>
+<ul>
+<li>第一种是nice值(-20~ +19)：默认值为0，<strong>nice值越大优先级越低</strong></li>
+<li>第二种是实时优先级，其值是可配置的：默认情况下是[0-99]，<strong>数值越大优先级越高</strong>。</li>
+</ul>
+</li>
+<li><p>时间片：时间片是一个数值，它表明进程在被抢占前所能持续运行的时间。时间片需要提前设置。一般来说I/O消耗型希望时间片短，CPU消耗希望时间片长。</p>
+</li>
+</ul>
+<h4 id="Linux调度算法"><a href="#Linux调度算法" class="headerlink" title="Linux调度算法"></a>Linux调度算法</h4><p>Linux调度器是通过模块的方式提供的，这样做为了是允许不同类型的进程可以有针对性的选择调度算法。</p>
+<p><strong>进程可以分为普通进程和实时进程。普通进程使用的调度算法就是CFS；实时进程由于其需要实时响应，因此优先级高，之后在讨论。</strong></p>
+<p>在Unix系统中用到的调度算法还是基于时间片和优先级的。但是这种算法有个本质的问题：<strong>分配绝对的时间片引发的固定的切换频率，给公平性造成了很大的变数。</strong>在这里CFS完全摒弃了时间片而是<strong>分配给进程一个处理器使用比重。</strong></p>
+<p>CFS做法：<strong>允许每个进程运行一段时间、循环轮转、选择运行最少的进程作为下一个运行进程。CFS在所有可运行进程总数基础上计算出一个进程应该运行多久，而不是给一个绝对的时间片。</strong></p>
+<p>其实这里还是用到了nice值，但是不是像之前的那样使用绝对的nice值，而是使用<strong>nice差值（进程A nice = 0， 进程B nice = 5 和 进程A nice = 15 进程B nice = 20</strong>二者的CPU时间分配是一样的。nice值对时间片的作用不再是算数加权，而是<strong>几何加权</strong>。</p>
+<blockquote>
+<p>总结下CFS调度算法特点：（相对的时间片概念）</p>
+<ul>
+<li>不是给一个绝对的时间片，而是给一个相对的nice值。</li>
+<li>这个nice值是进程之间的nice差值，对时间片的作用是几何加权。</li>
+</ul>
+</blockquote>
+<h4 id="Linux调度的实现"><a href="#Linux调度的实现" class="headerlink" title="Linux调度的实现"></a>Linux调度的实现</h4><p>调度器实体的数据结构是进程描述符 <code>task_struct</code>中的<code>struct sched_entity</code></p>
+<p>完全公平调度（CFS）算法的实现可以分为四个组成部分</p>
+<ul>
+<li><p><strong>时间记账</strong>：所有调度器都必须对进程运行时间做记账，这个记账相当于时间片，当记账值为0，则可以被抢占。</p>
+<ul>
+<li>虚拟实时：<code>sched_entity</code>中的<code>vruntime</code>变量存放进程的虚拟运行时间，<strong>该运行时间的计算是经过了所有可运行进程数的标准化。</strong>该事件是以ns为单位的，与定时器节拍不再相关。CFS使用该变量来记录一个程序到底运行了多长时间以及它还能运行多久。</li>
+<li><code>update_curr()</code>:该函数是由<strong>系统定时器周期性调用</strong>的，该函数计算了当前进程的执行时间，并将其放入<code>delta_exec</code>变量中。这样通过这两个变量，不过是进程处于那种状态，都能够准确测量出给定进程运行时间，而且可知道谁应是下一个运行的进程。</li>
+</ul>
+</li>
+<li><p><strong>进程选择</strong>：CFS调度算法的核心：<strong>当CFS需要选择下一个运行进程时，它会挑一个具有最小<code>vruntime</code>的进程</strong>。那么如何选择这个进程呢？</p>
+<p><strong>CFS使用红黑树来组织可运行进程队列，这样可以迅速找到最小<code>vruntime</code>的进程</strong>。</p>
+<ul>
+<li><p>挑选下一个任务： 运行红黑树中最左边叶子节点所代表的进程。 使用 <code>__pick_next_entity()</code></p>
+</li>
+<li><p>向树中加入进程：进程变为可运行状态时，加入红黑树。使用<code>__enqueue_entity()</code></p>
+</li>
+<li><p>从树中删除进程：进程变为阻塞或终止时，从红黑树删除。使用<code>__dequeue_entity()</code></p>
+</li>
+</ul>
+<p>这些操作都要熟悉红黑树才能理解。</p>
+</li>
+<li><p>调度器入口： <code>schedule()</code>，该函数是找到可运行的最高优先级进程，然后调度它。</p>
+</li>
+<li><p>休眠和唤醒：进程处于休眠状态需要将其从可执行红黑树中移除，然后加入<strong>等待队列</strong>。然后调用<code>schedule()</code>选择和执行一个其他进程。唤醒操作语气相反。</p>
+<p>等待队列是一个简单链表。休眠和唤醒操作记得要考虑<strong>竞争条件</strong>。</p>
+</li>
+</ul>
+<h4 id="抢占和上下文切换"><a href="#抢占和上下文切换" class="headerlink" title="抢占和上下文切换"></a>抢占和上下文切换</h4><p>上下文切换就是从一个可执行进程切换到另一个可执行进程。由函数<code>context_switch()</code>执行。该函数完成了以下两项基本工作。</p>
+<ul>
+<li><p>调用声明在<code>&lt;asm/mmu_context.h&gt;</code>中的<code>switch_mm()</code>,该函数负责把<strong>虚拟内存</strong>从上一个进程映射切换到新进程中。</p>
+</li>
+<li><p>调用声明在<code>&lt;asm/system&gt;</code>中的<code>switch_to()</code>,该函数负责从上一个进程的<strong>处理器状态</strong>切换到新进程的处理器状态。这包括保存、恢复栈信息和寄存器信息，还有一些与体系结构相关的状态信息。</p>
+</li>
+</ul>
+<p>内核必须知道在什么时候调用<code>schedule()</code>。内核提供了一个<code>need_resched</code>标志来表明是否需要重新执行一次调度。当某个进程应该被抢占时，一些函数会设置这个标志，然后内核检查该标志被设置，调用<code>schedule()</code>来切换到新的进程。</p>
+<p>抢占：</p>
+<ul>
+<li><p><strong>用户抢占</strong>：这个可以理解为在用户空间中进程对CPU进行抢占。在内核即将返回用户空间时，<code>need_resched</code>标志被设置，这个时候会调用<code>schedule()</code>.（这个时候内核会选择一个其他更合适的进程投入运行）</p>
+<p>简而言之：用户抢占发生在以下情况：</p>
+<ul>
+<li>从系统调用返回用户空间时</li>
+<li>从中断处理程序返回用户空间时</li>
+</ul>
+</li>
+<li><p><strong>内核抢占</strong>：指一个在内核态运行的进程，可能在执行内核函数期间被另一个进程取代。（这要求重新调度室安全的，即正在执行的进程代码<strong>是没有持有锁的</strong>。）</p>
+<p>简而言之：内核抢占会发生在：</p>
+<ul>
+<li>中断处理程序正在执行，且返回用户空间之前</li>
+<li>内核代码再一次具有抢占性的时候</li>
+<li>如果内核中的进程显示调用<code>schedule()</code></li>
+<li>如果内核中进程阻塞（也会调用<code>schedule()</code>）</li>
+</ul>
+</li>
+</ul>
+<h4 id="实时调度策略"><a href="#实时调度策略" class="headerlink" title="实时调度策略"></a>实时调度策略</h4><p>​    实时调度策略是针对实时进程的。<strong>实时进程因为优先级都较高，所以采用的是静态优先级。内核不为实时进程计算动态优先级。这样能保证给定优先级别的实时进程总能抢占优先级比它低的进程。</strong></p>
+<p>​    如果是普通进程，其调度策略是<code>SCHED_NORMAL</code>,就是上面提到的那种。</p>
+<p>采用的两种实时策略：</p>
+<ul>
+<li><code>SCHED_FIFO</code>:这个是简单的先入先出调度算法：<strong>它不使用时间片</strong>。处于可运行状态的<code>SCHED_FIFO</code>一定比<code>SCHED_NORMAL</code>更优先执行。<strong>由于不使用时间片，是非抢占的。只有优先级高的执行完，优先级低的才能执行。</strong></li>
+<li><code>SCHED_RR</code>: 这个和上面那个大体相同，但是这个是有时间片的。时间片耗完就得重新调度。<strong>时间片只用来重新调度同一优先级的进程。</strong></li>
+<li>两者优先级调度都采用的是高优先级先调度，同一优先级的轮流调度。</li>
+</ul>
+<h4 id="调度相关系统调用"><a href="#调度相关系统调用" class="headerlink" title="调度相关系统调用"></a>调度相关系统调用</h4><p>​    Linux提供一个系统调用族，用于管理与调度程序相关的参数。这些系统调用可以用来操作、处理进程优先级、调度策略及处理器绑定。这些都在下一章会讲。</p>
+<p>​    不过这里有个<code>sched_yield()</code>系统调用，能够让该进程自动放弃CPU，放弃的进程加入过期队列中，这样该进程在一段时间内都不会再被执行了。</p>
+<h4 id="小结-1"><a href="#小结-1" class="headerlink" title="小结"></a>小结</h4><p>​    进程调度程序是内核的重要组成部分。Linux新的CFS调度算法要掌握。</p>
+<h3 id="进程通信"><a href="#进程通信" class="headerlink" title="进程通信"></a>进程通信</h3><p>进程经常需要与其他进程通信。进程通信中一般伴有三个需要处理的问题：</p>
+<ul>
+<li>一个进程如何把信息传递给另一个</li>
+<li>确保两个或多个进程在关键活动中不会交叉</li>
+<li>进程执行的正常顺序</li>
+</ul>
+<p>这三个问题中的第二第三个问题对于线程也同样适用。第一个问题线程很简单，因为线程共享一个地址空间和拥有全局变量。但另外两个问题同样适用于线程。</p>
+<p>本小节只注意第一个问题，至于二三个问题放在内核同步中去讲。</p>
+<p>进程间的通信方式有以下几种</p>
+<ul>
+<li>匿名管道</li>
+<li>命名管道</li>
+<li>消息队列</li>
+<li>信号量</li>
+<li>信号</li>
+<li>共享内存</li>
+<li>套接字</li>
+</ul>
+<h4 id="管道"><a href="#管道" class="headerlink" title="管道"></a>管道</h4><p>管道分为匿名管道和命名管道，二者的区别如下</p>
+<ul>
+<li>匿名管道只能在具有亲子关系的进程间进行通信</li>
+<li>命名管道可以在无亲子关系的进程间进行通信</li>
+</ul>
+<p>这里来简单描述下匿名管道的步骤。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 通过pipe()函数来创建匿名管道</span></span><br><span class="line"><span class="comment">// 返回值：成功返回0，失败返回-1</span></span><br><span class="line"><span class="comment">// fd参数返回两个文件描述符</span></span><br><span class="line"><span class="comment">// fd[0]指向管道的读端，fd[1]指向管道的写端</span></span><br><span class="line"><span class="comment">// fd[1]的输出是fd[0]的输入。</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">pipe</span><span class="params">(<span class="keyword">int</span> fd[<span class="number">2</span>])</span></span>;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>父进程创建管道，得到<strong>两个⽂件描述符</strong>指向管道的两端</li>
+<li>父进程fork出子进程，⼦进程也有<strong>两个⽂件描述符</strong>指向同⼀管道。</li>
+<li><strong>父进程关闭fd[0],子进程关闭fd[1]，即⽗进程关闭管道读端,⼦进程关闭管道写端（因为管道只支持单向通信）。⽗进程可以往管道⾥写,⼦进程可以从管道⾥读,管道是⽤环形队列实现的,数据从写端流⼊从读端流出,这样就实现了进程间通信。</strong></li>
+</ul>
+<p><strong>总结来说，管道是一种简单的进程通信方式。它是一种半双工的通信方式，数据只能单向流动</strong>。而且流动二字意味着管道其实是个字节流方法。</p>
+<h4 id="消息队列"><a href="#消息队列" class="headerlink" title="消息队列"></a>消息队列</h4><p>消息队列，<strong>就是一个消息的链表，是一系列保存在内核中消息的列表</strong>。<strong>用户进程可以向消息队列添加消息，也可以向消息队列读取消息</strong>。</p>
+<p>消息队列与管道通信相比，其优势是对<strong>每个消息指定特定的消息类型，接收的时候不需要按照队列次序，而是可以根据自定义条件接收特定类型的消息</strong>。</p>
+<p>可以把消息看做一个记录，具有特定的格式以及特定的优先级。对消息队列有写权限的进程可以向消息队列中按照一定的规则添加新消息，对消息队列有读权限的进程可以从消息队列中读取消息。</p>
+<p>进程通过消息队列通信，主要是：</p>
+<ul>
+<li>创建或打开消息队列</li>
+<li>添加消息</li>
+<li>读取消息</li>
+<li>控制消息队列</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>msgget</code></td>
+<td>创建或打开消息队列</td>
+</tr>
+<tr>
+<td><code>msgsnd</code></td>
+<td>添加消息</td>
+</tr>
+<tr>
+<td><code>msgrcv</code></td>
+<td>读取消息</td>
+</tr>
+<tr>
+<td><code>msgctl</code></td>
+<td>控制消息队列</td>
+</tr>
+</tbody></table>
+<h4 id="信号"><a href="#信号" class="headerlink" title="信号"></a>信号</h4><p>信号其实是进程向内核发生一个系统调用，然后该系统调用再让内核去和另外一个进程进行通信。</p>
+<h4 id="信号量"><a href="#信号量" class="headerlink" title="信号量"></a>信号量</h4><p>信号量的话放在内核同步中去讲。</p>
+<h4 id="共享内存"><a href="#共享内存" class="headerlink" title="共享内存"></a>共享内存</h4><p>共享内存允许两个或多个进程共享一个给定的存储区，<strong>这一段存储区可以被两个或两个以上的进程映射至自身的地址空间中，一个进程写入共享内存的信息，可以被其他使用这个共享内存的进程，通过一个简单的内存读取错做读出，从而实现了进程间的通信。</strong></p>
+<p>采用共享内存进行通信的一个主要好处是<strong>效率高</strong>，因为进程可以直接读写内存，而不需要任何数据的拷贝，<strong>对于像管道和消息队里等通信方式，则需要再内核和用户空间进行四次的数据拷贝，而共享内存则只拷贝两次：一次从输入文件到共享内存区，另一次从共享内存到输出文件。</strong>因为管道这些都借助了内核，需要内核和用户态之间进行数据拷贝，这样一来就多了两次。</p>
+<p>一般而言，进程之间在共享内存时，并不总是读写少量数据后就解除映射，有新的通信时在重新建立共享内存区域；而是保持共享区域，直到通信完毕为止，这样，数据内容一直保存在共享内存中，并没有写回文件。共享内存中的内容往往是在解除映射时才写回文件，因此，采用共享内存的通信方式效率非常高。</p>
+<p>共享内存的两种实现方式：</p>
+<ul>
+<li>内存映射</li>
+<li>共享内存机制</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>mmap</code></td>
+<td>建立共享内存映射</td>
+</tr>
+<tr>
+<td><code>munmap</code></td>
+<td>解除共享内存映射</td>
+</tr>
+<tr>
+<td><code>shmget</code></td>
+<td>获取共享内存区域的ID</td>
+</tr>
+<tr>
+<td><code>shmat</code></td>
+<td>建立映射共享内存</td>
+</tr>
+<tr>
+<td><code>shmdt</code></td>
+<td>解除共享内存映射</td>
+</tr>
+</tbody></table>
+<h4 id="套接字"><a href="#套接字" class="headerlink" title="套接字"></a>套接字</h4><p>套接字也是一种信号通信方式，这种方法一般用于不同主机之间的进程通信。因此套接字编程又称为网络编程，这个会在网络编程分类中详细的讲，这里便省略。</p>
+<h3 id="内核同步介绍"><a href="#内核同步介绍" class="headerlink" title="内核同步介绍"></a>内核同步介绍</h3><p>总所周知，多个线程在访问和操作共享资源的时候，叫做并发访问。并发访问很有可能发生各个线程之间相互覆盖共享数据的状态，这样导致被访问数据不一致的状态。要想防止并发访问带来的问题，我们要学会同步。这一章我们来介绍内核同步。</p>
+<h4 id="单处理器并发"><a href="#单处理器并发" class="headerlink" title="单处理器并发"></a>单处理器并发</h4><p>​    在只有单处理器的时候，<strong>只有在中断发生的时候，或者在内核明确请求重新调度、执行另一个任务的时候，数据才可能并发访问</strong>，这样一来其实防止并发非常简单。只需要注意重新调度和中断即可。</p>
+<p>​    这种并发称之为<strong>伪并发执行</strong>。以下是一些单CPU下的伪并发</p>
+<ul>
+<li><p>中断：中断能够随时打断当前的代码。</p>
+</li>
+<li><p>软中断和tasklet：内核能在任何时候唤醒或调度软中断和tasklet</p>
+</li>
+<li><p>内核抢占：内核具有抢占性</p>
+</li>
+<li><p>睡眠及用户空间的同步：进程睡眠之后的重新调度。</p>
+<p>上面这四种如果在多处理器上的话可能还是真正的并发。</p>
+</li>
+<li><p>堆成多处理：多处理器下同时访问相同一段代码。</p>
+</li>
+</ul>
+<h4 id="临界区和竞争条件"><a href="#临界区和竞争条件" class="headerlink" title="临界区和竞争条件"></a>临界区和竞争条件</h4><ul>
+<li>临界区：访问和操作共享数据的代码段</li>
+<li>竞争条件：<strong>多个执行线程（进程/线程/中断处理程序）并发（并行）访问共享资源</strong>，因为执行顺序不一样造成结果不一样的情况，称为竞争条件</li>
+<li>同步：避免并发和防止竞争条件称为同步。</li>
+</ul>
+<h4 id="原子性的理解"><a href="#原子性的理解" class="headerlink" title="原子性的理解"></a>原子性的理解</h4><p>原子变量：在硬件方面是使用<strong>锁总线</strong>的方式（最新的可能会有变化）来实现指令连续执行而不被打断。</p>
+<p><strong>锁总线的效果非常低效，现在是通过阻塞其它CPU核对相关内存的缓存块访问来实现原子操作。</strong></p>
+<p>这里可以看<a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/33445834%E8%BF%99%E4%B8%AA%E5%9B%9E%E7%AD%94%E3%80%82">https://zhuanlan.zhihu.com/p/33445834这个回答。</a></p>
+<h4 id="加锁"><a href="#加锁" class="headerlink" title="加锁"></a>加锁</h4><p>​    为了让临界区不被多线程并发访问，内核实现了锁的机制。这种机制确保A线程标记访问临界区时，其它线程禁止访问该临界区。加锁能够实现以串行方式对资源进行访问，不过这样同时会降低系统的性能。</p>
+<p>​    锁有各种各样的实现形式，锁的各种机制的区别主要在于：当锁已经被其他线程持有，因而不可用时的表现：</p>
+<ul>
+<li>一些锁被争用时会简单的<strong>执行忙等待</strong>（自旋锁）</li>
+<li>一些锁被争用时会使<strong>当前任务睡眠</strong>知道锁可用为止（信号量）</li>
+</ul>
+<p>加锁这个问题要在设计代码的时候就要考虑。这个问题特别难。</p>
+<h4 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h4><p>死锁就是<strong>一个或多个线程和一个或多个资源，每个线程都在等待一个资源，但是所有资源都被占用了。这样导致所有线程都在相互等待，而且不会释放已经占有的资源。</strong></p>
+<p>最简单的死锁：自死锁（递归调用非递归锁）</p>
+<p>如何避免死锁：</p>
+<ul>
+<li>按顺序加锁</li>
+<li>防止发生饥饿，即最好不要出现线程一直等待的现象。</li>
+<li>不要重复请求同一个锁</li>
+<li>设计方案尽可能简单。</li>
+</ul>
+<h4 id="争用和扩展性"><a href="#争用和扩展性" class="headerlink" title="争用和扩展性"></a>争用和扩展性</h4><p>​    争用是指当锁正在被占用时，有其他线程试图获得该锁。如果有多个线程都在试图获得这个锁，那就说明该锁正在被高度争用。这样的话会极大的降低系统的性能。</p>
+<p>​    当锁的争用问题变得严重的时候，设计就向更加惊喜的加锁方向进化。加锁从全局锁精化到了每个处理器都有自己的锁，这样的话扩展性大大的增强了。</p>
+<p>​    扩展性是指系统在扩展的时候能够使性能尽可能的高。内核加锁的粒度很细，这样的话扩展性也会更好。CFS调度器也进一步提升了锁的可扩展性。</p>
+<h3 id="内核同步方法"><a href="#内核同步方法" class="headerlink" title="内核同步方法"></a>内核同步方法</h3><p>​    上一章讨论了竞争条件的产生以及如何去解决。这一章我们来介绍Linux内核提供的同步方法。</p>
+<h4 id="原子操作"><a href="#原子操作" class="headerlink" title="原子操作"></a>原子操作</h4><p>​    原子操作是其他同步操作的基石。原子操作保证指令在执行过程中不被打断。</p>
+<p>​    原子操作的本来意思是指在一个时钟周期内完成的操作，这样就不可能被打断。</p>
+<ul>
+<li>实现原子操作原理：（使用<strong>Volatile</strong>关键字）<ul>
+<li>最早是通过汇编指令LOCK，CPU锁总线，直到该指令完成之后在释放总线。</li>
+<li>上一种效率很低，现在的话是<strong>LOCK只会阻塞其他cpu核对相关内存的缓存块的访问。</strong></li>
+</ul>
+</li>
+</ul>
+<p>（这里 Volatile 的作用是确保指令不会优化写入寄存器中，这样就防止了指令重排）</p>
+<ul>
+<li><p>原子操作对象</p>
+<ul>
+<li><p>原子整数操作：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 32 bits</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">atomic_t</span>&#123;</span></span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">int</span> counter;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 64 bits</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">atomic64_t</span>&#123;</span></span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">long</span> counter;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+<li><p>原子位操作：没有对象，只有一些接口。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">set_bit</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span>* addr)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">clear_bit</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span>* addr)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">change_bit</span><span class="params">(<span class="keyword">int</span> nr, <span class="keyword">void</span>* addr)</span></span>;</span><br><span class="line"><span class="comment">// ...</span></span><br></pre></td></tr></table></figure>
+
+<p>为什么要有原子位操作？</p>
+<p>因为对位进行操作不是原子的，而是有两个步骤</p>
+<ul>
+<li>先对某位置位，然后清0。（置位操作和清除操作顺序可能不一样）。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="自旋锁"><a href="#自旋锁" class="headerlink" title="自旋锁"></a>自旋锁</h4><p>​    自旋锁是Linux中最常见的锁。</p>
+<p>​    自旋锁只能被一个可执行线程持有。<strong>如果一个执行线程试图获得已经持有的自旋锁，那么该线程会一直进行忙循环——旋转——等待锁重新可用。</strong>这也是自旋锁的最大特点。</p>
+<ul>
+<li><p>自旋锁的特点：</p>
+<ul>
+<li>自旋锁只适用于短时间内的轻量级加锁（因为一旦自旋，处理器会一直循环等待）</li>
+<li><strong>自旋锁是不可递归的！重复加同一个锁也会自旋！</strong></li>
+<li>自旋锁可以在中断处理程序中。但是<strong>在中断处理程序中使用自旋锁一定要禁止本地中断（同一CPU上的中断）</strong></li>
+</ul>
+</li>
+<li><p>自旋锁操作：</p>
+<table>
+<thead>
+<tr>
+<th align="center">方法</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">spin_lock()</td>
+<td align="center">获取指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_lock_irq()</td>
+<td align="center"><strong>禁止本地中断</strong>并获取指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_lock_irqsave()</td>
+<td align="center">保存本地中断的状态，然后<strong>禁止本地中断</strong>并获取指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_unlock()</td>
+<td align="center">释放指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_unlock_irq()</td>
+<td align="center">释放指定的锁并<strong>激活本地中断</strong></td>
+</tr>
+<tr>
+<td align="center">spin_unlock_irqrestore()</td>
+<td align="center">释放指定的锁并让本地中断恢复到之前的状态</td>
+</tr>
+<tr>
+<td align="center">spin_lock_init()</td>
+<td align="center">动态初始化指定的锁</td>
+</tr>
+<tr>
+<td align="center">spin_trylock()</td>
+<td align="center">试图获取指定的锁，如果未获取，返回非0</td>
+</tr>
+<tr>
+<td align="center">spin_is_locked()</td>
+<td align="center">如果指定的锁正在被获取，返回非0</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>自旋锁和下半部</p>
+<p>由于三者的抢占关系： 中断处理程序 &gt; 下半部 &gt; 进程上下文。</p>
+<p>如果在进程上下文和下半部中共享数据，要<strong>禁止下半部</strong>，如果中断处理程序和下半部共享数据，要禁止中断。这些都要得到锁的保护。</p>
+</li>
+</ul>
+<ul>
+<li>读-写自旋锁</li>
+</ul>
+<p>​    Linux内核专门提供了读-写锁。不过在使用中如果对于读写分不太清还是用普通的自旋锁。</p>
+<p>​    在读写锁中，当读锁被持有时，写操作只能自旋等待，而读操作可以继续占用锁，这样的话会让写操作无限延迟。</p>
+<p>​    自旋锁提供的是一种快速简单的锁实现方法。<strong>适用于加锁时间不长并且代码不会睡眠（如中断处理程序），利用自旋锁是最佳选择。</strong>如果加锁时间长或者代码持有锁时可能会睡眠，那么用信号量。</p>
+<h4 id="信号量-1"><a href="#信号量-1" class="headerlink" title="信号量"></a>信号量</h4><p>​    Linux中的信号量是一个睡眠锁。<strong>当一个任务试图获得一个已经被占用的信号量时，信号量会将其推进一个等待队列，然后让其睡眠，这样处理器会重获自由，去处理其他代码。</strong></p>
+<ul>
+<li><p>与自旋锁的对比</p>
+<ul>
+<li>更好的利用了CPU利用率</li>
+<li><strong>开销比自旋锁大。</strong></li>
+<li>不能既占用信号量又占用自旋锁。</li>
+<li><strong>信号量可以同时允许任意数量的锁持有者</strong>，而自旋锁只能有一个。</li>
+</ul>
+</li>
+<li><p>计数信号量</p>
+<p>信号量可以同时允许任意数量的锁持有者这个特性是通过引用计数count来实现的。count是该信号量的使用数量。</p>
+</li>
+<li><p>二值信号量</p>
+<p>该类信号量的count只有0和1，这个和mutex有点像。</p>
+</li>
+</ul>
+<h4 id="互斥体Mutex"><a href="#互斥体Mutex" class="headerlink" title="互斥体Mutex"></a>互斥体Mutex</h4><p>​    <strong>Mutex是一个相对于信号量更为轻便的睡眠锁</strong>，这是个简化版信号量，<strong>没有引用计数。</strong></p>
+<p>​    Mutex不仅仅只是没有引用计数，而且还使用了<code>futex</code>机制。(futex不只在mutex中实现了，基本上linux上所有的线程同步都能够使用这个)</p>
+<ul>
+<li><p><code>futex</code>机制</p>
+<p><code>Futex</code>是一种用户态和内核态混合的同步机制。</p>
+<p>首先，同步的进程间通过<code>mmap</code>共享一段内存，**<code>futex</code>变量就位于这段共享的内存中且操作是原子<strong>的，当</strong>进程尝试进入互斥区或者退出互斥区的时候，先去查看共享内存中的futex变量，如果没有竞争发生，则只修改<code>futex</code>,而不用再执行系统调用了。当通过访问<code>futex</code>变量告诉进程有竞争发生，则还是得执行系统调用去完成相应的处理(wait 或者 wake up)。**</p>
+<p>简单的说，<code>futex</code>就是通过在<strong>用户态的检查，如果了解到没有竞争就不用陷入内核了</strong>，大大提高了low-contention时候的效率。</p>
+</li>
+<li><p>Mutex操作</p>
+<table>
+<thead>
+<tr>
+<th align="center">方法</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">mutex_lock(struct mutex *)</td>
+<td align="center">为指定的mutex上锁，如果锁不可用时则睡眠</td>
+</tr>
+<tr>
+<td align="center">mutex_unlock(struct mutex *)</td>
+<td align="center">为指定的mutex解锁</td>
+</tr>
+<tr>
+<td align="center">mutex_trylock(struct mutex *)</td>
+<td align="center">试图获取指定的mutex，成功返回1；如果锁被获取，返回0</td>
+</tr>
+<tr>
+<td align="center">mutex_is_locked(struct mutex *)</td>
+<td align="center">如果锁已被争用，则返回1，否则返回0</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>Mutex使用特点</p>
+<ul>
+<li> 任何时刻最多只能有一个任务持有mutex。</li>
+<li> <strong>当持有一个mutex时，进程不可以退出</strong>。</li>
+<li> mutex不能在中断和下半部使用，即使使用mutex_trylock()也不行。</li>
+<li> <strong>一般来说在同一进程上下文中加锁解锁。</strong></li>
+</ul>
+</li>
+</ul>
+<p><strong>对于互斥体和信号量，优先使用信号量</strong></p>
+<h4 id="顺序锁"><a href="#顺序锁" class="headerlink" title="顺序锁"></a>顺序锁</h4><p>​    通常简称seq锁。用于<strong>读写共享数据</strong>。这种锁的实现是依靠一个序列计数器。如果有疑义的数据被写入时，会得到一个锁，并且序列值会增加。当序列值为偶数，那代表加的锁都是读操作。如果是奇数，那么有写操作，优先执行写操作。</p>
+<p>该锁适用于</p>
+<ul>
+<li>数据读操作很多</li>
+<li>数据写操作很少</li>
+<li>写操作虽然很少但是优先读操作</li>
+<li>数据很简单</li>
+</ul>
+<p>使用这种锁的情况下有jiffies,该变量存储了Linux机器启动到当前时间。</p>
+<h4 id="禁止抢占"><a href="#禁止抢占" class="headerlink" title="禁止抢占"></a>禁止抢占</h4><p>​    内核是有抢占性的，内核中的进程在任何时候都可能停下来运行另外一个进程。这意味着一个任务和被强占的任务可能在同一临界区内运行。为了避免这种情况下，<strong>内核抢占代码使用自旋锁为非抢占区域，即禁止抢占</strong>。</p>
+<h4 id="屏障"><a href="#屏障" class="headerlink" title="屏障"></a>屏障</h4><p>​    barrier，保证了顺序性。因为编译器和处理器为了提高效率，可能对读和写重新排序，有些机器指令能够确保顺序要求（volatile），同时也可以指示编译器不要对指定点周围的指令序列进行重新排列。这些确保顺序的指令称作屏障。</p>
+
       
     </div>
     
@@ -472,6 +1009,20 @@
     
 
     <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/%E8%BF%9B%E7%A8%8B%E7%AE%A1%E7%90%86/" rel="tag"><i class="fa fa-tag"></i> 进程管理</a>
+          
+            <a href="/tags/%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1/" rel="tag"><i class="fa fa-tag"></i> 进程通信</a>
+          
+            <a href="/tags/%E7%BA%BF%E7%A8%8B/" rel="tag"><i class="fa fa-tag"></i> 线程</a>
+          
+            <a href="/tags/%E8%BF%9B%E7%A8%8B%E8%B0%83%E5%BA%A6/" rel="tag"><i class="fa fa-tag"></i> 进程调度</a>
+          
+            <a href="/tags/%E5%86%85%E6%A0%B8%E5%90%8C%E6%AD%A5/" rel="tag"><i class="fa fa-tag"></i> 内核同步</a>
+          
+        </div>
       
 
       
@@ -564,8 +1115,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+      <section class="site-overview-wrap sidebar-panel">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
             
@@ -584,7 +1144,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">27</span>
+                  <span class="site-state-item-count">28</span>
                   <span class="site-state-item-name">日志</span>
                 </a>
               </div>
@@ -606,7 +1166,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">30</span>
+                  <span class="site-state-item-count">37</span>
                   <span class="site-state-item-name">标签</span>
                 </a>
               </div>
@@ -646,6 +1206,10 @@
                 
                 
                   <li class="recent_posts_li">
+                    <a href="/posts/eb52a7b2/" title="Redis数据库" target="_blank">Redis数据库</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
                     <a href="/posts/81b224e1/" title="中断" target="_blank">中断</a>
                   </li>
                 
@@ -659,10 +1223,6 @@
                 
                   <li class="recent_posts_li">
                     <a href="/posts/ae533703/" title="文件管理" target="_blank">文件管理</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/41e39f2b/" title="内存管理" target="_blank">内存管理</a>
                   </li>
                 
               </ul>
@@ -681,6 +1241,22 @@
         </div>
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E7%AE%A1%E7%90%86"><span class="nav-number">1.</span> <span class="nav-text">进程管理</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E6%A6%82%E5%BF%B5"><span class="nav-number">1.1.</span> <span class="nav-text">进程概念</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E6%8F%8F%E8%BF%B0%E7%AC%A6"><span class="nav-number">1.2.</span> <span class="nav-text">进程描述符</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E7%8A%B6%E6%80%81"><span class="nav-number">1.3.</span> <span class="nav-text">进程状态</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="nav-number">1.4.</span> <span class="nav-text">进程上下文</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E5%88%9B%E5%BB%BA"><span class="nav-number">1.5.</span> <span class="nav-text">进程创建</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Linux%E4%B8%AD%E7%BA%BF%E7%A8%8B%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.6.</span> <span class="nav-text">Linux中线程实现</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E7%BB%88%E7%BB%93"><span class="nav-number">1.7.</span> <span class="nav-text">进程终结</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93"><span class="nav-number">1.8.</span> <span class="nav-text">小结</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E8%B0%83%E5%BA%A6"><span class="nav-number">2.</span> <span class="nav-text">进程调度</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%9A%E4%BB%BB%E5%8A%A1"><span class="nav-number">2.1.</span> <span class="nav-text">多任务</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Linux%E7%9A%84%E8%BF%9B%E7%A8%8B%E8%B0%83%E5%BA%A6"><span class="nav-number">2.2.</span> <span class="nav-text">Linux的进程调度</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%AD%96%E7%95%A5"><span class="nav-number">2.3.</span> <span class="nav-text">策略</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Linux%E8%B0%83%E5%BA%A6%E7%AE%97%E6%B3%95"><span class="nav-number">2.4.</span> <span class="nav-text">Linux调度算法</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Linux%E8%B0%83%E5%BA%A6%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">2.5.</span> <span class="nav-text">Linux调度的实现</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%8A%A2%E5%8D%A0%E5%92%8C%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2"><span class="nav-number">2.6.</span> <span class="nav-text">抢占和上下文切换</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AE%9E%E6%97%B6%E8%B0%83%E5%BA%A6%E7%AD%96%E7%95%A5"><span class="nav-number">2.7.</span> <span class="nav-text">实时调度策略</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%B0%83%E5%BA%A6%E7%9B%B8%E5%85%B3%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8"><span class="nav-number">2.8.</span> <span class="nav-text">调度相关系统调用</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%B0%8F%E7%BB%93-1"><span class="nav-number">2.9.</span> <span class="nav-text">小结</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E9%80%9A%E4%BF%A1"><span class="nav-number">3.</span> <span class="nav-text">进程通信</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%AE%A1%E9%81%93"><span class="nav-number">3.1.</span> <span class="nav-text">管道</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97"><span class="nav-number">3.2.</span> <span class="nav-text">消息队列</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BF%A1%E5%8F%B7"><span class="nav-number">3.3.</span> <span class="nav-text">信号</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BF%A1%E5%8F%B7%E9%87%8F"><span class="nav-number">3.4.</span> <span class="nav-text">信号量</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%85%B1%E4%BA%AB%E5%86%85%E5%AD%98"><span class="nav-number">3.5.</span> <span class="nav-text">共享内存</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A5%97%E6%8E%A5%E5%AD%97"><span class="nav-number">3.6.</span> <span class="nav-text">套接字</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E6%A0%B8%E5%90%8C%E6%AD%A5%E4%BB%8B%E7%BB%8D"><span class="nav-number">4.</span> <span class="nav-text">内核同步介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8D%95%E5%A4%84%E7%90%86%E5%99%A8%E5%B9%B6%E5%8F%91"><span class="nav-number">4.1.</span> <span class="nav-text">单处理器并发</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%B4%E7%95%8C%E5%8C%BA%E5%92%8C%E7%AB%9E%E4%BA%89%E6%9D%A1%E4%BB%B6"><span class="nav-number">4.2.</span> <span class="nav-text">临界区和竞争条件</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8E%9F%E5%AD%90%E6%80%A7%E7%9A%84%E7%90%86%E8%A7%A3"><span class="nav-number">4.3.</span> <span class="nav-text">原子性的理解</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8A%A0%E9%94%81"><span class="nav-number">4.4.</span> <span class="nav-text">加锁</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%AD%BB%E9%94%81"><span class="nav-number">4.5.</span> <span class="nav-text">死锁</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BA%89%E7%94%A8%E5%92%8C%E6%89%A9%E5%B1%95%E6%80%A7"><span class="nav-number">4.6.</span> <span class="nav-text">争用和扩展性</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E6%A0%B8%E5%90%8C%E6%AD%A5%E6%96%B9%E6%B3%95"><span class="nav-number">5.</span> <span class="nav-text">内核同步方法</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8E%9F%E5%AD%90%E6%93%8D%E4%BD%9C"><span class="nav-number">5.1.</span> <span class="nav-text">原子操作</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%87%AA%E6%97%8B%E9%94%81"><span class="nav-number">5.2.</span> <span class="nav-text">自旋锁</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BF%A1%E5%8F%B7%E9%87%8F-1"><span class="nav-number">5.3.</span> <span class="nav-text">信号量</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BA%92%E6%96%A5%E4%BD%93Mutex"><span class="nav-number">5.4.</span> <span class="nav-text">互斥体Mutex</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%A1%BA%E5%BA%8F%E9%94%81"><span class="nav-number">5.5.</span> <span class="nav-text">顺序锁</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A6%81%E6%AD%A2%E6%8A%A2%E5%8D%A0"><span class="nav-number">5.6.</span> <span class="nav-text">禁止抢占</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%B1%8F%E9%9A%9C"><span class="nav-number">5.7.</span> <span class="nav-text">屏障</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       
@@ -709,7 +1285,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">52.2k</span>
+    <span title="Site words total count">69.6k</span>
   
 </div>
 <!--
