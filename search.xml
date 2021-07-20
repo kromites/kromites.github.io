@@ -183,7 +183,7 @@
 <ol>
 <li><p><strong>文件事件处理器的构成</strong></p>
 <p>文件事件处理器四个组成部分：套接字、I/O多路复用程序、文件事件分派器以及事件处理器。</p>
-<img src="/posts/undefined/%E6%96%87%E4%BB%B6%E4%BA%8B%E4%BB%B6%E5%A4%84%E7%90%86%E5%99%A8.png" class title="文件事件处理器">
+<img src="/posts/912da1e/%E6%96%87%E4%BB%B6%E4%BA%8B%E4%BB%B6%E5%A4%84%E7%90%86%E5%99%A8.png" class title="文件事件处理器">
 
 <ul>
 <li>套接字：文件事件是对套接字操作的抽象，每当一个套接字准备好执行操作时，就会产生一个文件事件。</li>
@@ -256,7 +256,7 @@
 
 
 
-<img src="/posts/undefined/%E6%9C%8D%E5%8A%A1%E5%99%A8%E8%BF%90%E8%A1%8C%E6%B5%81%E7%A8%8B.png" class title="服务器运行流程">
+<img src="/posts/912da1e/%E6%9C%8D%E5%8A%A1%E5%99%A8%E8%BF%90%E8%A1%8C%E6%B5%81%E7%A8%8B.png" class title="服务器运行流程">
 
 <p>​                                                                                                        </p>
 <p>事件调度和执行的规则：</p>
@@ -1301,7 +1301,112 @@
   <entry>
     <title>内存管理</title>
     <url>/posts/41e39f2b/</url>
-    <content><![CDATA[]]></content>
+    <content><![CDATA[<blockquote>
+<p>本篇文章总结一下Linux操作系统中内存管理相关知识，比如虚拟内存以及虚拟内存中的分页分表，内存分配算法和slab分配器，缺页中断和页面置换算法，页缓存和页回写等。</p>
+</blockquote>
+<span id="more"></span>
+
+<h3 id="虚拟内存"><a href="#虚拟内存" class="headerlink" title="虚拟内存"></a>虚拟内存</h3><h4 id="虚拟内存是什么？"><a href="#虚拟内存是什么？" class="headerlink" title="虚拟内存是什么？"></a>虚拟内存是什么？</h4><p>​    虚拟内存是将整个程序切割成多个片段，在需要的时候将该片段加载入内存，在不需要的时候又将其换出。这样在宏观层次上就可以认为该内存能够完全装满该程序。（但实际上可能内存比程序要小）</p>
+<p>​    虚拟内存的基本思想是每个程序拥有自己的地址空间，这个空间被分割成多个快，每个块称作一页或页面。每一页有连续的地址范围。这些页被映射到物理内存，但并不是所有的页都必须在内存中才能运行。</p>
+<p>​    之后会详细的介绍如何实现虚拟内存以及分页技术。</p>
+<p>​    Linux使用虚拟内存技术，因此<strong>系统中所有进程之间以虚拟方式共享内存</strong>。对一个进程而言，它好像都可以访问整个系统的所有物理内存。即使单独一个进程，它拥有的地址空间也可以远远大于系统物理内存。</p>
+<p>​    </p>
+<h4 id="为什么使用虚拟内存"><a href="#为什么使用虚拟内存" class="headerlink" title="为什么使用虚拟内存"></a>为什么使用虚拟内存</h4><p>首先，如果不使用虚拟内存的话，那么就是直接使用物理内存，物理内存的使用会造成以下问题：</p>
+<ol>
+<li>地址空间不隔离，可能被恶意程序修改其他程序内存数据。</li>
+<li>内存使用效率低</li>
+<li>程序运行的地址不确定</li>
+<li>如果程序的大小大于内存，那该怎么办？</li>
+</ol>
+<p>这些问题都是直接使用物理内存出现的无法接受的缺点，使用虚拟地址空间能够完美的将这些问题都解决。</p>
+<p>首先是第四条，在上文已经介绍过了，程序大小大于内存，将程序分段，可以将不常用的程序段放入磁盘，常用的放在内存中，如果需要磁盘中的程序段的话，操作系统能够动态地将内存换入换出。</p>
+<p>针对第一条和第三条，分段能够完美解决：<strong>分段是指将一段与程序所需要的的内存空间大小的虚拟空间映射到某个地址空间。</strong>这样确实能够将程序隔离，但是内存使用效率依旧很低，因此必须使用分页技术，将内存的利用效率提高。</p>
+<h4 id="分页"><a href="#分页" class="headerlink" title="分页"></a>分页</h4><p>​    分页的基本思想是把地址空间人为地等分成固定大小的页，每一页的大小有硬件决定，一般来说是4KB（64位就是8KB）。<strong>分页不仅适用于虚拟内存空间，还适用于物理内存空间。</strong></p>
+<p>​    由于物理地址和虚拟地址都有页的概念，因此对其加以区分：<strong>物理页称为页框，虚拟页称为页面。</strong></p>
+<p>​    内核把物理页作为内存管理的基本单位。虽然说CPU的最小寻址单位是字甚至是字节，但内存管理空间(<strong>MMU, 管理内存并把虚拟地址转换为物理地址的硬件</strong>)通常以页为单位进行处理。<strong>从虚拟内存的角度来看，页就是最小单位。</strong></p>
+<p>​    内核用<code>struct page</code>结构表示系统中的每个<strong>物理页</strong>。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">page</span>&#123;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> 			flags;</span><br><span class="line">    <span class="keyword">atomic_t</span> 				_count;</span><br><span class="line">    <span class="keyword">atomic_t</span> 				_mapcount;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> 			<span class="keyword">private</span>;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> 	*<span class="title">mapping</span>;</span></span><br><span class="line">    <span class="keyword">pgoff_t</span>					index;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>		<span class="title">lru</span>;</span></span><br><span class="line">    <span class="keyword">void</span> 					*<span class="keyword">virtual</span>;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">*	flags 	-&gt; 存放页的状态：每一位单独表示一种状态。	如这些页是不是脏的，是不是被锁定在内存中。</span></span><br><span class="line"><span class="comment">*	_count 	-&gt; 存放页的引用计数，如果没被引用，则置为-1。</span></span><br><span class="line"><span class="comment">*	virtual	-&gt; 页的虚拟地址。通常情况下是页在虚拟内存中的地址。</span></span><br><span class="line"><span class="comment">* 	该结构体占40B的内存。</span></span><br><span class="line"><span class="comment">*/</span></span><br></pre></td></tr></table></figure>
+
+<p>​    </p>
+<h4 id="内存映射"><a href="#内存映射" class="headerlink" title="内存映射"></a>内存映射</h4><p>​    </p>
+<p>​    上文可知由程序产生的这些地址叫做虚拟地址。因为有了虚拟内存的技术，程序现在处理的是虚拟地址，但是处理器直接操作的仍是物理地址，这样的话当程序去访问一个地址时，首先是要将虚拟地址转化为物理地址。然后处理器才能解析访问请求。</p>
+<p>​    <strong>通过内存管理单元MMU将虚拟地址映射为物理内存地址</strong>，该过程称为内存映射。不同的页面能够映射到同一个页框。</p>
+<p><strong>页表：</strong></p>
+<p>​    内存映射是通过MMU解析该页面的<strong>页表</strong>来实现的，Linux使用了三/四级页表结构完成地址转换。每个进程都会有自己的页表（线程会共享页表）</p>
+<p>​    <strong>操作页表的时候必须使用page_table_lock锁</strong></p>
+<p>​    页表是把虚拟页面映射为页框，页表项上有个<strong>页框号</strong>，页面就是通过这个来映射到页框的。</p>
+<p>然后是一些页表上的位：</p>
+<ul>
+<li><p>在/不在标志位</p>
+<ul>
+<li>为0，页面没有映射到页框，访问该页面地址直接引发缺页中断。</li>
+<li>为1，可以使用，会有一个页框号的值</li>
+</ul>
+</li>
+<li><p>保护位：允许执行什么操作</p>
+<ul>
+<li>三位，分别表示读写执行（类似文件）</li>
+</ul>
+</li>
+<li><p>修改位：是否修改（在页面置换，页回写和缓存中很重要）</p>
+<ul>
+<li>为0，未修改，该页面是“干净”的</li>
+<li>为1，已修改，该页面是“脏”的</li>
+</ul>
+</li>
+<li><p>访问位：该页面被访问的次数（读，写，执行）</p>
+<ul>
+<li>这个标志着该页面使用的频繁程度。</li>
+</ul>
+</li>
+</ul>
+<p>值得强调的，虚拟内存本质上是用来创建一个新的抽象概念——地址空间。虚拟地址对物理内存的抽象就像是进程对CPU的抽象。</p>
+<h4 id="加速分页过程"><a href="#加速分页过程" class="headerlink" title="加速分页过程"></a>加速分页过程</h4><p>​    目前我们已经了解到了内存映射和分页概念。现在可以讨论可能的实现了。在任何分页系统都需要考虑以下两个主要问题：</p>
+<ul>
+<li>虚拟地址到物理地址的映射必须快！</li>
+<li>如果虚拟地址空间很大，页表也会很大</li>
+</ul>
+<p>​    针对第一个问题，我们可以使用缓存机制。总所周知的二八原则，百分之八十的时间在跑百分之二十的代码，因此使用缓存去存储这些很常用的页表是很有效的一件事。</p>
+<p>​    这个缓存称之为<strong>转换检测缓冲区（TLB）</strong>。一般可以有两种实现：硬件或者软件</p>
+<ul>
+<li>使用一个在MMU里面的硬件设备，将虚拟地址直接映射到物理地址，而不必再访问页表。<ul>
+<li>这样其实会加重MMU的负担，会使得MMU复杂化。但是这种方式很快。</li>
+</ul>
+</li>
+<li>使用一个TLB软件，在内存中的固定位置维护一个大的TLB表项的高速缓存。<ul>
+<li>这样能够获得一个简单的MMU，这就在CPU芯片上为高速缓存以及其他改善性能的设计腾出了相当大的空间。</li>
+<li>不过这个的效率没有硬件块</li>
+</ul>
+</li>
+</ul>
+<p>​    针对第二个问题，大内存的页表，采用多级页表的方法，这样能够避免将所有页表都放在内存中。</p>
+<p>使用多级页表，可以出现虽然虚拟空间有超过100万个页面，实际上只有四个页表</p>
+<ul>
+<li>顶级页表<ul>
+<li>正文段（0~4M）</li>
+<li>数据段（4~8M）</li>
+<li>堆栈段（4M）</li>
+</ul>
+</li>
+</ul>
+<p>以上是一级页表和二级页表，二级页表还能继续扩充。目前基本上都使用四级页表。页表寻址通过页目录指针。</p>
+<h3 id="缺页中断和页面置换算法"><a href="#缺页中断和页面置换算法" class="headerlink" title="缺页中断和页面置换算法"></a>缺页中断和页面置换算法</h3><h4 id="缺页中断"><a href="#缺页中断" class="headerlink" title="缺页中断"></a><strong>缺页中断</strong></h4><p>​    在上面的章节有物理页的数据结构，其中有些变量可以与虚拟页进行关联以及是否为脏页。</p>
+<p>​    当程序访问一个未映射页框的页面，那么CPU会陷入到内核，发生缺页中断或者缺页错误（虽然是缺页中断，但其实是软件中断，因为是指令执行因为找到该页面出错而引发的中断）。</p>
+<p>​    <strong>操作系统找到一个很少使用的页框且把它的内容写入磁盘（如果它不在磁盘上）。随后把需要访问的页面读到刚才回收的页框中，修改映射关系，然后重新启动引发陷阱的指令。</strong></p>
+<p>​    </p>
+<h4 id="页面置换算法"><a href="#页面置换算法" class="headerlink" title="页面置换算法"></a>页面置换算法</h4><h3 id="内存分配"><a href="#内存分配" class="headerlink" title="内存分配"></a>内存分配</h3><h3 id="进程地址空间"><a href="#进程地址空间" class="headerlink" title="进程地址空间"></a>进程地址空间</h3><h3 id="页高速缓存和回写"><a href="#页高速缓存和回写" class="headerlink" title="页高速缓存和回写"></a>页高速缓存和回写</h3>]]></content>
+      <categories>
+        <category>操作系统</category>
+      </categories>
+      <tags>
+        <tag>内存管理</tag>
+        <tag>虚拟内存</tag>
+        <tag>进程地址空间</tag>
+        <tag>缺页中断</tag>
+        <tag>页面置换</tag>
+        <tag>内存分配</tag>
+        <tag>页缓存和页回写</tag>
+      </tags>
   </entry>
   <entry>
     <title>操作系统简介</title>
