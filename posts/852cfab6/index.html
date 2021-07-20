@@ -131,7 +131,7 @@
 <meta property="og:description" content="本篇文章主要讲述的是操作系统的进程管理部分。进程管理部分包括进程的数据结构，进程状态与创建终止过程，进程之间的通信，进程调度方法，线程和内核同步等知识点。  进程管理进程概念 进程概念：进程是处于执行期的程序以及相关的资源总称。 相关资源：打开的文件，挂起的信号，内核内部数据，处理器状态，内存地址空间和执行线程，以及用来存放全局变量的段。 进程通过fork系统调用创建，exec函数创建新的地址空">
 <meta property="og:locale">
 <meta property="article:published_time" content="2021-07-17T08:09:33.000Z">
-<meta property="article:modified_time" content="2021-07-19T08:29:50.658Z">
+<meta property="article:modified_time" content="2021-07-19T10:23:49.364Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="进程管理">
 <meta property="article:tag" content="进程通信">
@@ -439,7 +439,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  9.5k
+                  9.6k
                 </span>
               
 
@@ -738,6 +738,7 @@
 </tr>
 </tbody></table>
 <h4 id="信号"><a href="#信号" class="headerlink" title="信号"></a>信号</h4><p>信号其实是进程向内核发生一个系统调用，然后该系统调用再让内核去和另外一个进程进行通信。</p>
+<p>信号是一个非常重要的处理异步事件的方法。一般来说信号是通过信号处理函数来实现的。信号处理函数在内核中注册，信号发送给内核之后，内核执行相对应的信号处理函数。</p>
 <h4 id="信号量"><a href="#信号量" class="headerlink" title="信号量"></a>信号量</h4><p>信号量的话放在内核同步中去讲。</p>
 <h4 id="共享内存"><a href="#共享内存" class="headerlink" title="共享内存"></a>共享内存</h4><p>共享内存允许两个或多个进程共享一个给定的存储区，<strong>这一段存储区可以被两个或两个以上的进程映射至自身的地址空间中，一个进程写入共享内存的信息，可以被其他使用这个共享内存的进程，通过一个简单的内存读取错做读出，从而实现了进程间的通信。</strong></p>
 <p>采用共享内存进行通信的一个主要好处是<strong>效率高</strong>，因为进程可以直接读写内存，而不需要任何数据的拷贝，<strong>对于像管道和消息队里等通信方式，则需要再内核和用户空间进行四次的数据拷贝，而共享内存则只拷贝两次：一次从输入文件到共享内存区，另一次从共享内存到输出文件。</strong>因为管道这些都借助了内核，需要内核和用户态之间进行数据拷贝，这样一来就多了两次。</p>
@@ -1144,7 +1145,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">28</span>
+                  <span class="site-state-item-count">32</span>
                   <span class="site-state-item-name">日志</span>
                 </a>
               </div>
@@ -1166,7 +1167,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">37</span>
+                  <span class="site-state-item-count">42</span>
                   <span class="site-state-item-name">标签</span>
                 </a>
               </div>
@@ -1206,23 +1207,23 @@
                 
                 
                   <li class="recent_posts_li">
+                    <a href="/posts/5edc58a6/" title="Redis服务器" target="_blank">Redis服务器</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/912da1e/" title="Redis事件" target="_blank">Redis事件</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/e28a809/" title="AOF持久化" target="_blank">AOF持久化</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/5f64b03b/" title="RDB持久化" target="_blank">RDB持久化</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
                     <a href="/posts/eb52a7b2/" title="Redis数据库" target="_blank">Redis数据库</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/81b224e1/" title="中断" target="_blank">中断</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/1abadc07/" title="死锁" target="_blank">死锁</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/4f5d4e8d/" title="系统调用" target="_blank">系统调用</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/ae533703/" title="文件管理" target="_blank">文件管理</a>
                   </li>
                 
               </ul>
@@ -1285,7 +1286,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">69.6k</span>
+    <span title="Site words total count">78.3k</span>
   
 </div>
 <!--
