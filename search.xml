@@ -1307,7 +1307,7 @@
 <span id="more"></span>
 
 <h3 id="虚拟内存"><a href="#虚拟内存" class="headerlink" title="虚拟内存"></a>虚拟内存</h3><h4 id="虚拟内存是什么？"><a href="#虚拟内存是什么？" class="headerlink" title="虚拟内存是什么？"></a>虚拟内存是什么？</h4><p>​    虚拟内存是将整个程序切割成多个片段，在需要的时候将该片段加载入内存，在不需要的时候又将其换出。这样在宏观层次上就可以认为该内存能够完全装满该程序。（但实际上可能内存比程序要小）</p>
-<p>​    虚拟内存的基本思想是每个程序拥有自己的地址空间，这个空间被分割成多个快，每个块称作一页或页面。每一页有连续的地址范围。这些页被映射到物理内存，但并不是所有的页都必须在内存中才能运行。</p>
+<p>​    虚拟内存的基本思想是<strong>每个程序拥有自己的地址空间，避免在加载时重定位</strong>，这个空间被分割成多个快，每个块称作一页或页面。每一页有连续的地址范围。这些页被映射到物理内存，但并不是所有的页都必须在内存中才能运行。</p>
 <p>​    之后会详细的介绍如何实现虚拟内存以及分页技术。</p>
 <p>​    Linux使用虚拟内存技术，因此<strong>系统中所有进程之间以虚拟方式共享内存</strong>。对一个进程而言，它好像都可以访问整个系统的所有物理内存。即使单独一个进程，它拥有的地址空间也可以远远大于系统物理内存。</p>
 <p>​    </p>
@@ -1394,7 +1394,435 @@
 <p>​    当程序访问一个未映射页框的页面，那么CPU会陷入到内核，发生缺页中断或者缺页错误（虽然是缺页中断，但其实是软件中断，因为是指令执行因为找到该页面出错而引发的中断）。</p>
 <p>​    <strong>操作系统找到一个很少使用的页框且把它的内容写入磁盘（如果它不在磁盘上）。随后把需要访问的页面读到刚才回收的页框中，修改映射关系，然后重新启动引发陷阱的指令。</strong></p>
 <p>​    </p>
-<h4 id="页面置换算法"><a href="#页面置换算法" class="headerlink" title="页面置换算法"></a>页面置换算法</h4><h3 id="内存分配"><a href="#内存分配" class="headerlink" title="内存分配"></a>内存分配</h3><h3 id="进程地址空间"><a href="#进程地址空间" class="headerlink" title="进程地址空间"></a>进程地址空间</h3><h3 id="页高速缓存和回写"><a href="#页高速缓存和回写" class="headerlink" title="页高速缓存和回写"></a>页高速缓存和回写</h3>]]></content>
+<h4 id="页面置换算法"><a href="#页面置换算法" class="headerlink" title="页面置换算法"></a>页面置换算法</h4><p>​    当发生缺页中断时，操作系统必须在内存中选择一个页面将其换出内存，以便为即将调入的页面腾出空间。如果换出的页面在内存驻留期间已经被修改过，就必须把它写回磁盘更新该页面的副本（这称为页回写），如果在磁盘中的副本是最新的，那么直接调入页面覆盖该页面即可。</p>
+<p>​    当发生缺页中断时，虽然可以随机选择一个页面进行置换，但是如果每次都选择不常使用的页面会提升系统的性能。因此在页面置换的研究中，发明了几个页面置换算法，下面我们就来看看。</p>
+<h5 id="最优页面置换"><a href="#最优页面置换" class="headerlink" title="最优页面置换"></a>最优页面置换</h5><ul>
+<li>原理：在缺页中断发生时，这些页面之一将在下一条指令（包含该指令的页面）上被引用。其他页面则可能要到 10、100 或者 1000 条指令后才会被访问。<strong>每个页面都可以用在该页首次被访问前所要执行的指令数作为标记</strong>。通过标记来选择该要置换的算法</li>
+<li>特点：无法实现，因为当发生缺页中断时，操作系统无法知道各个页面下一次将在什么时候访问，因此这不现实。</li>
+<li>总结：该算法主要是突出一个思想，就是尽量用最近不会使用的页面置换出去。</li>
+</ul>
+<h5 id="最近未使用页面置换（NRU"><a href="#最近未使用页面置换（NRU" class="headerlink" title="最近未使用页面置换（NRU)"></a>最近未使用页面置换（NRU)</h5><ul>
+<li><p>原理：虚拟内存为每一页面都设置了两个状态位，R和M。每当页面被访问（读或写）时设置R位；当页面被写入（即修改）时设置M位。一般在缺页中断的时候，选中的页面R位会置为1（R位会被时钟中断定期清0）</p>
+<p>因此，可以通过R和M位来构造简单的页面置换算法：操作系统将其所有页面的两个位都设置为 0。R 位定期的被清零（在每个时钟中断）。用来将最近未引用的页面和已引用的页面分开。</p>
+<p>当出现缺页中断后，操作系统会检查所有的页面，并根据它们的 R 位和 M 位将当前值分为四类：</p>
+<p>第 0 类：没有引用 R，没有修改 M<br>第 1 类：没有引用 R，已修改 M<br>第 2 类：引用 R ，没有修改 M<br>第 3 类：已被访问 R，已被修改 M</p>
+<p>其中第0类很少，可以直接替换，第一类看似没有，但是经过一个时钟中断能够将第三类转换为第一类。</p>
+</li>
+<li><p>特点：该算法从编号最小的非空类随机删除一个页面。易于理解且能够有效的实现。</p>
+</li>
+<li><p>总结：在一个时钟内（大概20ms）淘汰一个已修改但是没被访问的页面要比一个大量引用未修改的页面好。</p>
+</li>
+</ul>
+<h5 id="先进先出页面置换（FIFO）"><a href="#先进先出页面置换（FIFO）" class="headerlink" title="先进先出页面置换（FIFO）"></a>先进先出页面置换（FIFO）</h5><ul>
+<li>原理：和队列一样，先访问的先被修改。</li>
+<li>特点：最最最简单的页面替换算法</li>
+<li>总结：FIFO思想还是很重要的，在很多时候都是个简单易懂但不高效的方法</li>
+</ul>
+<h5 id="第二次机会页面置换"><a href="#第二次机会页面置换" class="headerlink" title="第二次机会页面置换"></a>第二次机会页面置换</h5><p>​    FIFO有个缺陷，入对和出队并不会进行check检查，这样会把经常使用的页面置换出去。因此本算法对FIFO有了一个改进。</p>
+<ul>
+<li>原理：检查最老页面的R位，如果是0，那就是最老且没有被使用，直接换出，如果是1，清除R位，让该页面放到队尾入队，然后继续检查链表头。</li>
+<li>特点：在FIFO上增加了一个检查机制，也是一个很简单的算法，但是效率提高了不少。</li>
+<li>总结：FIFO+R位检查机制</li>
+</ul>
+<h5 id="时钟页面置换"><a href="#时钟页面置换" class="headerlink" title="时钟页面置换"></a>时钟页面置换</h5><p>​    第二次机会页面置换比较合理，但是它经常要在链表中移动页面，降低了效率。本算法继续为上个算法进行改进。</p>
+<ul>
+<li>原理：<strong>把所有的页面都保存在一个类似钟面的环形链表中，一个表针指向最老的页面</strong>。当发生缺页中断中，检查表针指向的页面的R位，根据R为采取动作：R为0，淘汰页面，将新的页面插入到这个位置，指针前移; R为1，清除R位并向前移动表针，直到找到R为0的算法。</li>
+<li>特点：在上一个算法基础上减少了链表移动页面的次数，效率继续提高</li>
+<li>总结： FIFO+R位检查机制+环形链表</li>
+</ul>
+<h5 id="最少最近使用页面置换（LRU）"><a href="#最少最近使用页面置换（LRU）" class="headerlink" title="最少最近使用页面置换（LRU）"></a>最少最近使用页面置换（LRU）</h5><p>​    LRU老朋友了。在最优页面置换算法中，想要将以后不会被用到的指令页面进行替换，因为以后的使用情况不清楚，所以完全不可行。既然未来的统计不了，那就统计之前的。</p>
+<ul>
+<li>原理：统计之前的页面使用情况，在缺页中断时，置换未使用时间最长的页面。</li>
+<li>特点：理论上可以实现，使用哈希链表，但是代价比较高，需要<strong>在内存中维护一个所有页面的链表</strong>。当然可以通过硬件来实现，不过能够拥有此类硬件的设备比较少。</li>
+<li>总结：好方法但是代价高</li>
+</ul>
+<h5 id="老化算法"><a href="#老化算法" class="headerlink" title="老化算法"></a>老化算法</h5><p>​    老化算法是用软件实现LRU。老化算法是使用多个R位来实现简单的时间记录</p>
+<ul>
+<li>在R位被添加进来之前先把计数器右移一位。</li>
+<li>R位被添加到最左边位</li>
+</ul>
+<img src="/posts/41e39f2b/%E8%80%81%E5%8C%96%E7%AE%97%E6%B3%95.png" class title="老化算法">
+
+<p>从上图中可以看出</p>
+<ul>
+<li>在 0 个时钟周期到 1 个时钟周期之间，0，2，4，5 都被引用了，从而把它们的 R 位设置为 1，剩下的设置为 0 。在相关的六个计数器被右移之后 R 位被添加到左侧。</li>
+<li><strong>这样八位计数器就能记录着最近八个时钟周期内的页面使用情况，而且这八位越大就代表近期使用越频繁</strong></li>
+<li>在发生缺页中断的时候，只要<strong>置换掉计数器值最小的页面</strong>即可。</li>
+</ul>
+<p>该算法和LRU的差别</p>
+<ul>
+<li>在一个时钟周期内无法判断哪个先使用，哪个后使用</li>
+<li>计数器是有位数的，前第九个时钟周期和前第100个时钟周期使用的页面计数器值都为0</li>
+</ul>
+<p>总结：老化算法是LRU的一个阉割版，<strong>它牺牲了精度（在同一个时钟周期内的使用先后顺序不管）和广度（只关注最近八个时钟周期）。但是效率大大提升</strong>。</p>
+<h5 id="工作集页面置换"><a href="#工作集页面置换" class="headerlink" title="工作集页面置换"></a>工作集页面置换</h5><p>​    一个进程当前使用的页面的集合称为它的工作集。如果整个工作集都在内存中，那么不会产生很多缺页中断；如果内存太小无法容纳整个工作集，那么进程的运行过程中会产生大量缺页中断，导致运行速度变得缓慢。</p>
+<p>​    这样一来如果进程切换之后，工作集一般会保留，以待<strong>下一次进程切换回来之后，直接使用预先调页，将这个进程的工作集提前调入内存中。</strong>这样会很好的减少缺页中断，而且工作集是随着时间变化的。</p>
+<ul>
+<li><p>原理：明白工作集理论之后，该算法基本思路就是找出一个不在工作集中的页面并淘汰它。每个页面表项至少包含两个信息，一个是R位，一个是上次使用页面的时间，每个时钟周期都会将R位清0。之后缺页中断时对页表进行处理。</p>
+<ul>
+<li><p>R位为1，就会将当前时间写入页表时间，证明该页表在工作集中。</p>
+</li>
+<li><p>R位为0，检查当前时间，如果<code>当前时间-页表记录时间  &gt; t (t为进程近似运行时间)</code>,那么说明它不在工作集中，这样就可以置换该页面。如果小于等于t，那么说明他在工作集中，去找下一位，如果都是在工作集中，那么置换时间最旧的那个页面。</p>
+</li>
+</ul>
+<p>最坏情况下诗置换一个R位为1的页面。</p>
+</li>
+<li><p>特点：引入工作集，综合R位和时间，用两个维度来决定页面置换。但是<strong>要扫描整个页表才能确定被淘汰的页面</strong></p>
+</li>
+<li><p>总结：FIFO+R位检查+工作集时间检查</p>
+</li>
+</ul>
+<h5 id="工作集时钟页面置换（WSClock）"><a href="#工作集时钟页面置换（WSClock）" class="headerlink" title="工作集时钟页面置换（WSClock）"></a>工作集时钟页面置换（WSClock）</h5><ul>
+<li><p>原理：基于时钟算法，又结合工作集</p>
+<img src="/posts/41e39f2b/WSClock.png" class title="WSClock"></li>
+<li><p>特点：数据结构为一个以页框为元素的循环列表。每个表项有三位：R位，M位，上次使用时间</p>
+<ul>
+<li>R位为1，那么不适合淘汰，将R置为0，然后指针前移。</li>
+<li>R位为0，查看工作集的时间，根据工作集算法，判断是否删除。</li>
+</ul>
+<p>当然如果M为1，那么必须回写。</p>
+</li>
+<li><p>总结：FIFO+R位检查+工作集时间检查+循环链表</p>
+</li>
+</ul>
+<h5 id="页面置换算法总结"><a href="#页面置换算法总结" class="headerlink" title="页面置换算法总结"></a>页面置换算法总结</h5><img src="/posts/41e39f2b/%E9%A1%B5%E9%9D%A2%E7%BD%AE%E6%8D%A2%E7%AE%97%E6%B3%95.png" class title="页面置换算法">
+
+<p>总之，最好的算法是老化算法和WSClock算法。他们分别是基于 LRU 和工作集算法。他们都具有良好的性能并且能够被有效的实现。还存在其他一些好的算法，但实际上这两个可能是最重要的。</p>
+<h3 id="内存分配"><a href="#内存分配" class="headerlink" title="内存分配"></a>内存分配</h3><p>Linux支持多种内存分配机制。分配物理内存页框的主要机制是<strong>页面分配器，它使用了著名的伙伴算法</strong></p>
+<h4 id="伙伴算法"><a href="#伙伴算法" class="headerlink" title="伙伴算法"></a>伙伴算法</h4><p>​    简而言之，就是将内存分成若干块，然后尽可能以最适合的方式满足程序内存需求的一种内存管理算法，伙伴算法的一大优势是它能够完全避免外部碎片的产生。Linux把<strong>所有的空闲页框分组为 11 块链表</strong>，每一块链表分别包含大小为1，2，4，8，16，32，64，128，256，512 和 1024 个连续的页框。</p>
+<ul>
+<li><p>原理：申请时，伙伴算法会给程序分配一个较大的内存空间，即保证所有大块内存都能得到满足。很明显分配比需求还大的内存空间，会产生<strong>内部碎片</strong>。所以伙伴算法虽然能够完全避免外部碎片的产生，但这恰恰是以产生内部碎片为代价的。</p>
+</li>
+<li><p>举例：假设要请求一个256（129~256）个页框的块。算法先在256个页框的链表中检查是否有一个空闲块。如果没有这样的块，算法会查找下一个更大的页块，也就是，在512个页框的链表中找一个空闲块。如果存在这样的块，内核就把512的页框分成两等分，一般用作满足需求，另一半则插入到256个页框的链表中。如果在512个页框的块链表中也没找到空闲块，就继续找更大的块——1024个页框的块。如果这样的块存在，内核就把1024个页框块的256个页框用作请求，然后剩余的768个页框中拿512个插入到512个页框的链表中，再把最后的256个插入到256个页框的链表中。如果1024个页框的链表还是空的，算法就放弃并发出错误信号。</p>
+</li>
+<li><p>总结：伙伴算法在分配时找到比申请内存大的二的幂内存块，使用它并标记为可用，同时将该内存分配给应用程序。如果这样的内存不存在，则操作系统将寻找更大快的空闲内存，然后平分该内存。在回收内存的时候，内存大小相同的合并成更大的单独块。 </p>
+</li>
+<li><p>伙伴： 满足一下条件的叫伙伴</p>
+<ul>
+<li>两个块具有相同大小，记作b</li>
+<li>它们物理地址是连续的</li>
+<li>第一个块的第一个页框物理地址是2 * b * 2^12的倍数。</li>
+</ul>
+</li>
+</ul>
+<h4 id="获得页"><a href="#获得页" class="headerlink" title="获得页"></a>获得页</h4><p>​    伙伴算法是针对物理页分配的思想，这里我们就来了解下Linux内核是如何获取页和释放页的。</p>
+<p>​    内核获得页和释放页是通过下面几个函数来实现的</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 1. 获得页</span></span><br><span class="line"></span><br><span class="line"><span class="function">struct page* <span class="title">alloc_pages</span><span class="params">(<span class="keyword">gfp_t</span> gfp_mask, <span class="keyword">unsigned</span> <span class="keyword">int</span> order)</span></span>;</span><br><span class="line"><span class="comment">// 该函数分配 2^order个连续的物理页，并返回一个指针，该指针指向第一个页的结构体，如果出错，那么返回NULL。 gfp是分配器标志。</span></span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">page_address</span><span class="params">(struct page* page)</span></span>;</span><br><span class="line"><span class="comment">// 物理地址转换为逻辑地址。</span></span><br><span class="line"><span class="keyword">unsigned</span> <span class="keyword">long</span> __get_free_page(<span class="keyword">gfp_t</span> gfp_mask);</span><br><span class="line"><span class="comment">// 该函数是上面两个函数的结合。</span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">get_zero_page</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">int</span> gfp_mask)</span></span>;</span><br><span class="line"><span class="comment">// 返回的页内容全为0.</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 2. 释放页</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span> __free_pages(struct page* page, <span class="keyword">unsigned</span> <span class="keyword">int</span> order);</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">free_pages</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> addr, <span class="keyword">unsigned</span> <span class="keyword">int</span> order)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">free_page</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> addr)</span></span>;</span><br><span class="line"><span class="comment">// 上面三个释放函数简单易懂，第一个是中断物理页释放物理页，后面是通过虚拟页来释放。</span></span><br></pre></td></tr></table></figure>
+
+<p>释放页时需谨慎，只能释放属于自己的页。因为CPU在内核态权级很大，内核完全信赖自己。如果删除错误可能会导致系统崩溃。</p>
+<h4 id="kmalloc"><a href="#kmalloc" class="headerlink" title="kmalloc()"></a><code>kmalloc()</code></h4><p>kmalloc()函数与用户空间的mallo()一族函数非常类似，只不过多了一个flags参数。</p>
+<p><strong>kmalloc()函数可以获得一个以字节为单位的内核内存。</strong>（如果需要一整块页，上面的函数更适合你）</p>
+<p><strong>kmalloc()保证物理地址上是连续的（自然虚拟地址也是连续的）</strong></p>
+<p><strong>kfree()函数释放有kmalloc()分配出来的内存块。</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/slab.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">kmalloc</span><span class="params">(<span class="keyword">size_t</span> size, <span class="keyword">gfp_t</span> flags)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kfree</span><span class="params">(<span class="keyword">const</span> <span class="keyword">void</span>* ptr)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><p>gfp_mask标志</p>
+<p>这个是分配器标志。标志可分为三类：行为修饰符、区修饰符及类型。</p>
+<ul>
+<li><p>行为修饰符：表示内核应当如何分配所需的内存，在特定情况下只能有特定办法分配内存。如中断情况下不能睡眠。</p>
+</li>
+<li><p>区修饰符：表示内核从哪里分配内存，Normal，DMA，HighEM。（默认Normal）</p>
+</li>
+<li><p>类型：组合上面两类修饰符，将各种组合用到的组合归纳为不同类型。</p>
+<table>
+<thead>
+<tr>
+<th align="center">标志</th>
+<th align="center">修饰符组合</th>
+<th align="center">描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">GFP_ATOMIC</td>
+<td align="center">__GFP_HIGH</td>
+<td align="center">用于中断处理程序，下半部，持有自旋锁以及其他不能睡眠的地方。</td>
+</tr>
+<tr>
+<td align="center">GFP_NOWAIT</td>
+<td align="center">0</td>
+<td align="center">与上者类似，不同之处是调用不会退给紧急内存池。</td>
+</tr>
+<tr>
+<td align="center">GFP_NOIO</td>
+<td align="center">__GFP_WAIT</td>
+<td align="center">可以阻塞，但是不会启动磁盘I/O</td>
+</tr>
+<tr>
+<td align="center">GFP_NOFS</td>
+<td align="center"><code>__GFP_WAIT</code></td>
+<td align="center"><code>__GFP_IO</code></td>
+</tr>
+<tr>
+<td align="center">GFP_KERNEL</td>
+<td align="center"><code>__GFP_WAIT</code></td>
+<td align="center"><code>__GFP_IO</code></td>
+</tr>
+<tr>
+<td align="center">GFP_USER</td>
+<td align="center"><code>__GFP_WAIT</code></td>
+<td align="center"><code>__GFP_IO</code></td>
+</tr>
+<tr>
+<td align="center">GFP_HIGHUSER</td>
+<td align="center"><code>__GFP_WAIT</code></td>
+<td align="center"><code>__GFP_IO</code></td>
+</tr>
+<tr>
+<td align="center">GFP_DMA</td>
+<td align="center">__GFP_DMA</td>
+<td align="center">这个是从ZONE_DMA进行分配。</td>
+</tr>
+</tbody></table>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="vmalloc"><a href="#vmalloc" class="headerlink" title="vmalloc()"></a><code>vmalloc()</code></h4><p>​    <strong>vmalloc()函数的工作方式类似于kmalloc(),只不过前者分配的内存虚拟地址是连续的，而物理地址无需连续。</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 不需要gfp标志。就是malloc(不过malloc是分配用户空间的，kv二者是关注内核空间)</span></span><br><span class="line"><span class="comment">// 该函数可能睡眠</span></span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">vmalloc</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> size)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">vfree</span><span class="params">(<span class="keyword">const</span> <span class="keyword">void</span>* addr)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p><strong>这也是用户空间分配函数的工作方式： 由malloc()返回的页在进程的虚拟空间内是连续的，但不保证在物理RAM找那个也是连续的。</strong></p>
+<p>​    一般来说，只有硬件设备需要物理地址连续的内存，因此硬件分配内存一定使用kmalloc()。不过vmalloc()函数为了把物理上不连续的页转换为虚拟地址空间上连续的页，必须专门建立页表项。而且获得的页必须一个一个映射，这样映射特别大。因此vmalloc()只有在不得已时才使用——典型就是为了获得大块内存是。</p>
+<h4 id="Slab层"><a href="#Slab层" class="headerlink" title="Slab层"></a>Slab层</h4><p>​    分配和释放数据结构是内核中最普遍的操作之一。为了便于数据的频繁分配和回收，Linux内核提供了Slab层（也就是Slab分配器）。</p>
+<p>​    slab层扮演了<strong>通用数据结构缓存层</strong>的角色。slab分配器尝试在以下几个基本原则寻求一种平衡</p>
+<ul>
+<li><p>基本原则：</p>
+<ul>
+<li>频繁使用的数据结构也会频繁分配和释放，因此应当缓存它们。</li>
+<li>频繁分配和后手必然会导致内存碎片。因此使用空闲链表的缓存会连续的存放。因为已释放的数据结构又会放回空闲链表，因此不会导致碎片。</li>
+<li>回收的对象可以立即投入下一次分配。</li>
+<li>如果分配器知道对象大小、页大小和总高速缓存的大小概念，它能做出更明智的选择。</li>
+<li>如果让部分缓存属于单个处理器（对系统上的每个处理器独立而唯一），那么分配和释放就不需要加处理器锁。</li>
+<li>对存放的对象进行着色，以防止多个对象映射到相同的高速缓存行。</li>
+</ul>
+</li>
+<li><p>设计</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">slab</span>&#123;</span></span><br><span class="line">  	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> 	<span class="title">list</span>;</span>		<span class="comment">// 空闲链表</span></span><br><span class="line">   	<span class="keyword">unsigned</span> <span class="keyword">long</span> 		colouroff;	<span class="comment">// slab着色偏移量</span></span><br><span class="line">    <span class="keyword">void</span> 				*s_mem;		<span class="comment">// slab分配的第一个对象</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> 		inuse;		<span class="comment">// slab中已分配的对象数</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">kmem_bufctl_t</span> <span class="title">free</span>;</span>		<span class="comment">// 第一个空闲对象，如果有的话</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>slab层把不同的对象划分为<strong>高速缓存组</strong>。高速缓存组存放不同类型的对象。每个告诉缓存由一个或多个slab组成。一个slab由多个连续物理页组成。</li>
+</ul>
+<ul>
+<li>每个slab都包含一些对象成员，这些对象成员就是被缓存的数据结构。每个slab有三种状态。<ul>
+<li>满：满的slab意味着slab中所有对象都被分配出去了。</li>
+<li>部分满：有一部分对象被分配出去了，还有一部分没有。</li>
+<li>空：所有对象都是空闲的。</li>
+</ul>
+</li>
+<li>当内核某一部分需要新的对象时，先从部分满slab进行分配，如果没有就从空的slab分配，如果两种都没有就只能创建一个slab。</li>
+<li>slab相当于一个高速缓存的专用分配器，可以为具体对象进行分配。</li>
+</ul>
+</li>
+<li><p>接口</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// 高速缓存结构</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">kmem_cache</span>&#123;</span></span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;;	</span><br><span class="line"></span><br><span class="line"><span class="comment">// 创建新的高速缓存		void(* ctor)(void*)为其构造函数。可以赋值NULL</span></span><br><span class="line"><span class="function">struct kmem_cache* <span class="title">kmem_cache_create</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* name, <span class="keyword">size_t</span> size, <span class="keyword">size_t</span> align, <span class="keyword">unsigned</span> <span class="keyword">long</span> flags, <span class="keyword">void</span>(* ctor)(<span class="keyword">void</span>*))</span></span>;</span><br><span class="line"><span class="comment">// 撤销高速缓存 撤销时保证下面所有的slab都为空。</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">kmem_cache_destory</span><span class="params">(struct kmem_cache* cachep)</span></span>;</span><br><span class="line"><span class="comment">// 从缓存中分配对象</span></span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">kmem_cache_alloc</span><span class="params">(struct kmem_cache* cachep, <span class="keyword">gfp_t</span> flags)</span></span>;</span><br><span class="line"><span class="comment">// 从缓存中释放对象，将该cachep中的对象objp标记为空闲。</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kmem_cache_free</span><span class="params">(struct kmem_cache* cachep, <span class="keyword">void</span>* objp)</span></span>;</span><br></pre></td></tr></table></figure></li>
+<li><p>总结：slab分配器就相当于是一个<strong>申请内存的高速缓存</strong>。它专门为某一模块预先一次性申请一定数量的内存备用，当这个模块想要使用内存的时候，就不再需要从系统中分配内存了（因为从系统中申请内存的时间开销相对来说比较大），而是直接从预申请的内存中拿出一部分来使用，这样就提高了这个模块的内存申请速度。</p>
+</li>
+</ul>
+<h4 id="在栈上静态分配"><a href="#在栈上静态分配" class="headerlink" title="在栈上静态分配"></a>在栈上静态分配</h4><p>​    内核栈小而且固定。为何如此设计？ 给进程分配一个固定大小的小栈后，不但能够减少内存的消耗，而且内核也无须负担太重的工作。</p>
+<p>​    任何一个函数，都必须减少栈的分配。想想什么东西会在栈上分配吧。因此如果要分配大块内存，还是使用动态分配，这样会分配在堆上。</p>
+<h4 id="分配内存的选择"><a href="#分配内存的选择" class="headerlink" title="分配内存的选择"></a>分配内存的选择</h4><p><strong>如果需要的是连续物理页，则使用低级页分配器或者kmalloc();</strong> （这是内核常见分配方式）</p>
+<p>如果高端内存进行分配，就使用<code>alloc_pages()</code>,然后调用kmap()将高端内存映射到内核的逻辑地址空间中。</p>
+<p>如果不需要连续物理页，仅仅需要连续虚拟页，则使用vmalloc(); 这和用户空间的malloc()非常相似。</p>
+<p>如果要创建和撤销很多大的数据结构，那么考虑建立<strong>slab高速缓存</strong>。slab分配器建立与空闲链表的数据结构上。slab层会给<strong>每个处理器维持一个对象高速缓存</strong>（空闲链表），这种高速缓存会极大地提高对象分配和回收的机制。 高速缓存避免了频繁分配和释放内存，是事先将分配好的对象放到高速缓存中。</p>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>​    本章中，我们从内核的物理页出发，了解了内核的内存管理机制。<strong>伙伴算法和slab高速缓存</strong>是本章的重点。其实这一章之前可以看看之前做的现代操作系统中内存管理的笔记。下一章我们介绍进程地址空间。来看看进程中的内存管理。</p>
+<h3 id="进程地址空间"><a href="#进程地址空间" class="headerlink" title="进程地址空间"></a>进程地址空间</h3><h4 id="地址空间布局"><a href="#地址空间布局" class="headerlink" title="地址空间布局"></a>地址空间布局</h4><p>​    <strong>进程地址空间是指用户空间进程看到的内存。内核进程是没有地址空间的。</strong></p>
+<p>​    Linux使用虚拟内存技术，因此<strong>系统中所有进程之间以虚拟方式共享内存</strong>。对一个进程而言，它好像都可以访问整个系统的所有物理内存。即使单独一个进程，它拥有的地址空间也可以远远大于系统物理内存。</p>
+<p>​    地址空间</p>
+<p>​    进程地址空间由进程可寻址的虚拟内存组成，内核允许进程是用虚拟内存中的地址。每个进程都有一个32位或64位的平坦(flat)地址空间；平坦指的是地址空间范围是一个独立的连续区间。</p>
+<p>​    不过操作系统提供了<strong>段地址空间</strong>，一个平坦的地址空间被段分成了几部分。不过现代采用虚拟内存的操作系统通常是使用平坦地址空间的内存模式。</p>
+<p>​    如果两个进程的地址空间相同，实际上也互不相干。那我们称这样的进程为线程。</p>
+<p>​    内存地址是一个给定的值，它在地址空间范围之内，代表着进程32位地址空间中一个特定的字节。尽管进程可以寻址4GB的虚拟内存，但是并不代表它有权访问所有的虚拟地址。</p>
+<p>​    能被合法访问的内存地址称作内存区域。进村只能访问有效内存区域内的内存地址。内存区域包括各种内存对象。</p>
+<img src="/posts/41e39f2b/%E8%BF%9B%E7%A8%8B%E5%9C%B0%E5%9D%80%E7%A9%BA%E9%97%B4.png" class title="进程地址空间">
+
+<p>地址从低往高：</p>
+<ul>
+<li>可执行文件代码的内存映射，称为代码段。(.text)</li>
+<li>可执行文件的已初始化全局变量的内存映射，称为数据段(.data)</li>
+<li>包含未初始化的全局变量的内存映射(.bss)</li>
+<li>用于进程用户空间栈（不要和进程内核栈混淆，进程的内核栈独立存在并由内核维护）的内存映射</li>
+<li>任何共享内存段</li>
+<li>任何匿名的内存映射：堆，比如有malloc()分配的内存（使用mmap和brk）</li>
+</ul>
+<h4 id="内存描述符"><a href="#内存描述符" class="headerlink" title="内存描述符"></a>内存描述符</h4><p>​    内核使用内存描述符来表示进程地址空间，该结构包含了和进程地址空间有关的全部信息。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/sched.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">mm_struct</span>&#123;</span></span><br><span class="line">  	<span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span>	*<span class="title">mmap</span>;</span>				<span class="comment">// 内存区域链表</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rb_root</span>			<span class="title">mm_rb</span>;</span>				<span class="comment">// VMA形成的红黑树</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span>	*<span class="title">mmap_cache</span>;</span>		<span class="comment">// 最近使用的内存区域</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			free_area_cache;	<span class="comment">// 地址空间第一个空洞</span></span><br><span class="line">    <span class="keyword">pgd_t</span> 					*pgd;				<span class="comment">// 页全局目录</span></span><br><span class="line">    <span class="keyword">atomic_t</span>				mm_users;			<span class="comment">// 使用地址空间的用户数</span></span><br><span class="line">    <span class="keyword">atomic_t</span>				mm_count;			<span class="comment">// 主使用计数器</span></span><br><span class="line">    <span class="keyword">int</span>						map_count;			<span class="comment">// 内存区域的个数</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rw_semaphore</span>		<span class="title">mmap_sem</span>;</span>			<span class="comment">// 内存区域的信号量</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>				page_table_lock;	<span class="comment">// 页表锁</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>		<span class="title">mmlist</span>;</span>				<span class="comment">// 所有mm_struct形成的链表</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			start_code;			<span class="comment">// 代码段的开始地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			end_code;			<span class="comment">// 代码段的结束地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			start_data;			<span class="comment">// 数据段的开始地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			end_data;			<span class="comment">// 数据段的结束地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			start_brk;			<span class="comment">// 堆的首地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			brk;				<span class="comment">// 堆的尾地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			start_stack;		<span class="comment">// 进程栈的首地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			arg_start;			<span class="comment">// 命令行参数的首地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			arg_end;			<span class="comment">// 命令行参数的尾地址 </span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			env_start;			<span class="comment">// 环境变量的首地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			env_end;			<span class="comment">// 环境变量的尾地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			rss;				<span class="comment">// 所分配的物理页</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			total_vm;			<span class="comment">// 全部页面数目</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			locked_vm;			<span class="comment">// 上锁的页面数目</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span>			saved_auxv[AT_VECTOR_SIZE];	<span class="comment">// 保存的auxv</span></span><br><span class="line">    <span class="keyword">cpumask_t</span>				cpu_vm_mask;		<span class="comment">// 懒惰TLB交换掩码</span></span><br><span class="line">    <span class="keyword">mm_context_t</span>			context;			<span class="comment">// 体系结构特殊数据</span></span><br><span class="line">    unsigned_long			flags;				<span class="comment">// 状态标志</span></span><br><span class="line">    <span class="keyword">int</span> 					core_waiters;		<span class="comment">// 内核转储等待线程</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">core_state</span>		*<span class="title">core_state</span>;</span>		<span class="comment">// 核心转储的支持</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>				ioctx_lock;			<span class="comment">// AIO I/O链表锁</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">hlist_head</span>		<span class="title">ioctx_list</span>;</span>			<span class="comment">// AIO I/O链表</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>​    mm_users域记录正在使用该地址的进程数目。（线程共享）</p>
+<p>​    mmap和mm_rb两个不同的数据结构描述的对象是相同的：<strong>该地址空间中的全部内存区域。 前者以链表的形式存放而后者以红-黑树的方式存放。</strong>这个冗余是有必要的，既可以快速搜索元素，也可以快速遍历元素。</p>
+<ul>
+<li><p>分配内存描述符</p>
+<ul>
+<li><p>在进程描述符<code>task_struct</code>中的mm域里面存放的就是内存描述符。<strong>每个进程都有唯一的进程地址空间。</strong></p>
+</li>
+<li><p><strong>fork函数利用copy_mm()复制父进程的内存描述符。然后再利用alloctate_mm()从slab缓存中分配自己的进程地址空间。</strong></p>
+</li>
+<li><p><strong>如果父进程希望和子进程共享空间，可以调用clone()时，设置clone_vm标志</strong>。这样就是线程。</p>
+</li>
+</ul>
+</li>
+<li><p>撤销内存描述符</p>
+<ul>
+<li>当进程退出时，内核会调用exit_mm(),该函数执行常规的撤销工作，然后减少mm_users的计数。</li>
+<li>当mm_users计数到0，调用mmdrop()函数，减少mm_count主使用计数器。</li>
+<li>如果mm_count也减少到0， 说明内存描述符没有任何使用者，调用free_mm()将结构体归还到mm_cachep_slab缓存中。</li>
+</ul>
+</li>
+<li><p>内核线程</p>
+<p><strong>内核线程没有用户空间，因此也没有进程地址空间，也没有相关的内存描述符。</strong></p>
+</li>
+</ul>
+<h4 id="虚拟内存区域"><a href="#虚拟内存区域" class="headerlink" title="虚拟内存区域"></a>虚拟内存区域</h4><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span>&#123;</span></span><br><span class="line">  	<span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span>	*<span class="title">vm_mm</span>;</span>			<span class="comment">// 相关的mm_struct结构体</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> 			vm_start;		<span class="comment">// 区间首地址</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> 			vm_end;			<span class="comment">// 区间尾地址	（左闭右开）</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_struct</span>	*<span class="title">vm_next</span>;</span>		<span class="comment">// vma链表</span></span><br><span class="line">    <span class="keyword">pgprot_t</span> 				vm_page_prot;	<span class="comment">// 访问控制权限</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> 			vm_flags;		<span class="comment">// 标志</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">rb_node</span>			<span class="title">vm_rb</span>;</span>			<span class="comment">// 树上的该VMA节点</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span>&#123;</span>									<span class="comment">// 关联与address_space-&gt;i_mmap字段,或者是关联于</span></span><br><span class="line">        <span class="comment">// address_space-&gt;i_mmap_nonlinear 字段</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">            <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">list</span>;</span></span><br><span class="line">            <span class="keyword">void</span>				*parent;</span><br><span class="line">            <span class="class"><span class="keyword">struct</span> <span class="title">vm_area_strcut</span> *<span class="title">head</span>;</span></span><br><span class="line">        &#125;vm_set;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">prio_tree_node</span> <span class="title">prio_tree_node</span>;</span></span><br><span class="line">    &#125;shared;</span><br><span class="line">    </span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> 		<span class="title">anon_vma_node</span>;</span>	<span class="comment">// anon_vma项</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">anon_vma</span>			*<span class="title">anon_vma</span>;</span>		<span class="comment">// 匿名VMA对象</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vm_operations_struct</span>	*<span class="title">vm_ops</span>;</span>	<span class="comment">// 相关操作表</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> 			vm_pgoff;		<span class="comment">//	文件中的偏移量</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span> 			*<span class="title">vm_file</span>;</span>		<span class="comment">// 被映射的文件</span></span><br><span class="line">    <span class="keyword">void</span> 					*vm_private_data;<span class="comment">// 私有数据</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>​    每个内存描述符都对应与进程地址空间唯一区间。</p>
+<p>​    vm_mm域指向和VMA相关的mm_struct结构体。每个VMA对其相关的mm_struct结构体来说是唯一的，所以即使在两个独立的进程将同一文件映射到它们自己的进程地址空间内，它们会分别生成一个结构体标志自己的内存区域。相反，如果两个线程共享同一个地址空间，那么他们也共享其中所有vm_area_struct结构体。</p>
+<ul>
+<li><p>VMA标志</p>
+<p>VMA标志反映了内核处理页面所需要的遵守的行为准则</p>
+<table>
+<thead>
+<tr>
+<th align="center">标志</th>
+<th align="center">对VMA及其页面的影响</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">VM_READ</td>
+<td align="center">页面可读取</td>
+</tr>
+<tr>
+<td align="center">VM_WRITE</td>
+<td align="center">页面可写</td>
+</tr>
+<tr>
+<td align="center">VM_EXEC</td>
+<td align="center">页面可执行</td>
+</tr>
+<tr>
+<td align="center">VM_SHARED</td>
+<td align="center">页面可共享</td>
+</tr>
+</tbody></table>
+<p>还有很多没有写出来。这些是最基本的。</p>
+</li>
+<li><p>VMA操作</p>
+<p>对虚拟内存地址相关操作</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">open</span><span class="params">(struct vm_area_struct* area)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">void</span>* <span class="title">close</span><span class="params">(struct vm_area_struct* area)</span></span>;</span><br><span class="line">...</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h4 id="操作内核区域"><a href="#操作内核区域" class="headerlink" title="操作内核区域"></a>操作内核区域</h4><p>​    内核对指定区域操作是非常频繁的，这同时也是mmap()例程的基础</p>
+<ul>
+<li><p>给定内存地址属于哪个区域</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="function">struct vm_area_struct* <span class="title">find_vma</span><span class="params">(struct mm_struct* mm, <span class="keyword">unsigned</span> <span class="keyword">long</span> addr)</span></span>;</span><br></pre></td></tr></table></figure></li>
+<li><p>//…</p>
+</li>
+</ul>
+<h4 id="操作地址空间"><a href="#操作地址空间" class="headerlink" title="操作地址空间"></a>操作地址空间</h4><ul>
+<li><strong>mmap()和do_mmap()：创建地址区间</strong></li>
+</ul>
+<p>​    <strong>内核使用do_mmap()创建一个新的线性地址区间</strong>。如果该区间和已存在的地址区间相邻，并且具有同样的访问权限，那么两个区间会合并成一个VMA。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/mm.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">do_mmap</span><span class="params">(struct file *file, <span class="keyword">unsigned</span> <span class="keyword">long</span> addr,</span></span></span><br><span class="line"><span class="params"><span class="function">                      <span class="keyword">unsigned</span> <span class="keyword">long</span> len, <span class="keyword">unsigned</span> <span class="keyword">long</span> prot,</span></span></span><br><span class="line"><span class="params"><span class="function">                      <span class="keyword">unsigned</span> <span class="keyword">long</span> flag, <span class="keyword">unsigned</span> <span class="keyword">long</span> offset)</span></span>;</span><br><span class="line"><span class="comment">// 该函数映射由file指定的文件，具体映射的是文件中从偏移offset开始，长度为len字节的范围内数据。 </span></span><br><span class="line"><span class="comment">// 如果file是NULL并且offset = 0; 那就代表和文件没关系，称为匿名映射。</span></span><br><span class="line"><span class="comment">// 如果这两个值有意义的话，那么称该映射为文件映射。</span></span><br></pre></td></tr></table></figure>
+
+<p>​    在用户空间可以通过mmap()系统调用获取内核函数do_mmap()de gongneng .</p>
+<ul>
+<li><p><strong>munmap()和do_munmap()：删除地址区间</strong></p>
+<p>do_munmap()函数从特定的进程地址空间中删除地址区间。</p>
+</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/mm.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">do_munmap</span><span class="params">(struct mm_struct *mm, <span class="keyword">unsigned</span> <span class="keyword">long</span> start, <span class="keyword">size_t</span> len)</span></span>;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="小结-1"><a href="#小结-1" class="headerlink" title="小结"></a>小结</h4><p>​    本章讲了下进程地址空间以及内核如何表示和操作这个空间。最后还讨论了页表。下一章我们通过页表去讨论下页缓存和数据回写。</p>
+<p>​    这两章都是站在内存的角度看内存管理，如果要细致的了解内存管理的知识，首先先去看《MOS》中的相关章节，了解下缺页中断和页面置换算法吧！</p>
+<h3 id="页高速缓存和回写"><a href="#页高速缓存和回写" class="headerlink" title="页高速缓存和回写"></a>页高速缓存和回写</h3><p>​    <strong>页高速缓存是Linux内核实现磁盘缓存。主要用来减少磁盘的I/O操作。</strong>具体的讲，就是将那些容易被访问的磁盘数据缓存到物理内存中，把对磁盘的访问变为对物理内存的访问。</p>
+<p>​    <strong>回写就是将高速缓存中变更的数据重新写到磁盘中去。</strong></p>
+<h4 id="缓存手段"><a href="#缓存手段" class="headerlink" title="缓存手段"></a>缓存手段</h4><p>​    <strong>页高速缓存是由内存中的物理页框组成的，</strong>其内容对应磁盘上的物理块。页高速缓存大小能够自适应调整。</p>
+<ul>
+<li><p>流程</p>
+<p>当内核开始一个读操作（比如发起一个read()系统调用），它首先会检查需要的数据是否在高速缓存中。如果在直接从内存中读取，这个行为叫<strong>缓存命中</strong>。如果数据没有在缓冲中，称为缓存未命中，那么内核必须调度块I/O从磁盘中读取数据。然后将读取的数据放到页缓存中。</p>
+</li>
+<li><p>写缓存</p>
+<p>Linux采取“回写”策略。在这个策略下，<strong>程序执行写操作直接写到缓存中，后端存储不会立刻直接更新</strong>，而是将页高速缓存这一页标记为“脏”，并将其添加到一个脏也链表中。然后统一由<strong>一个进程（回写进程）周期性将脏页链表中的页写回到磁盘</strong>，从而让磁盘中的数据和内存中最终一致。</p>
+</li>
+<li><p>缓存回收</p>
+<p>Linux的缓存回收是通过<strong>选择干净页（不脏）进行简单替换</strong>。如果干净页不足，强行执行回写操作，以腾出更多的干净可用页。然后<strong>回收那些以后最不可能使用的页面</strong>。如何选择到这些页面？</p>
+<ul>
+<li>LRU算法</li>
+<li>双链策略：维持两个链表——活跃链表和非活跃链表。两个链表都是通过LRU维护的，<strong>活跃链表是不可能换出的，只可能换出非活跃链表。</strong></li>
+</ul>
+</li>
+</ul>
+<h4 id="Linux页高速缓存"><a href="#Linux页高速缓存" class="headerlink" title="Linux页高速缓存"></a>Linux页高速缓存</h4><p>​    Linux页高速缓存使用了一个<strong>新对象管理缓存项</strong>和页I/O操作。这个对象是<code>addree_space</code>,和<code>vm_area_struct</code>物理地址是对等体。</p>
+<p>​    <code>Address_space</code>结构往往和某些内核对象关联.通常情况下,会与一个索引节点(inode)关联.此时host域便宜指向该索引节点.a_ops域指向地址空间对象中的操作函数表.由address_space_operations结构体表示。</p>
+<ul>
+<li><p>页面读操作流程<br>(1). linux内核试图在页高速缓存中找到需要的数据，find_get_page(mapping, index)负责<br>(2). 若没有找到，page_cache_alloc_cold(mapping), add_to_page_cache_lru(page, mapping, index)内核分配一个新页面，然后将之前搜索的页加入高速缓存中。<br>(3). 需要的数据从磁盘被读入，再被加入页高速缓存. mapping-&gt;a_ops-&gt;readpage(file, page)</p>
+</li>
+<li><p>页面写流程<br>当页被写了，VM仅需要调用SetPageDirty(page)，即可，内核晚些时候会通过writepage()方法写出。<br>特定文件的写操作路径包括：<br>(1). page = __grab_cache_page(mapping,index,&amp;cached_page,&amp;lru_prec);在页高速缓冲中搜索需要的页，不在则分配。<br>(2). status = a_ops-&gt;prepare_write(file,page,offset,offset+bytes);创建一个写请求<br>(3). page_fault = filemap_copy_from_user(page, offset, buf, bytes);数据从用户空间拷贝到内核<br>(4). status = a_ops-&gt;commit_write(file, page, offset, offset + bytes);数据写入磁盘</p>
+</li>
+<li><p>基树</p>
+<p>因为在任何页I/O操作前内核需要检查页是否已经在页高速缓存中，因此这种频繁的查找必须快。</p>
+<p>页高速缓存通过address_space和一个偏移量进行搜索，每个address_space对象都有唯一的基树，页高速缓存的搜索函数find_get_page()要调用函数radix_tree_lookup()进行查找。</p>
+</li>
+</ul>
+<h4 id="flusher线程"><a href="#flusher线程" class="headerlink" title="flusher线程"></a>flusher线程</h4><p>​    该线程是负责脏页写回磁盘。脏页被写回磁盘有三种情况。</p>
+<ul>
+<li><strong>当空闲内存低于一个特定的阈值时</strong>（即缓存需要回收的时候）</li>
+<li><strong>当脏页在内存中驻留时间超过特定阈值时</strong></li>
+<li><strong>当用户进程调用sync()和fsync()系统调用时</strong><br>由一群内核线程(flusher线程)执行这3种工作。</li>
+</ul>
+<p>空闲内存比阈值dirty_background_ratio低时，内核调用flusher_threads()唤醒一个或多个线程，随后flusher线程调用bdi_writeback_all()开始将脏页写回，直到有指定的最小数目的页被写出到磁盘或达到阈值。<br>为达到第二个条件，<strong>flusher线程会被周期性唤醒</strong>。 内核初始化一个定时器，周期唤醒flusher线程，随后使其运行wb_writeback()刷回。</p>
+<h4 id="小结-2"><a href="#小结-2" class="headerlink" title="小结"></a>小结</h4><p>​    本章只需要明白以下两点</p>
+<ul>
+<li>页高速缓存对写缓存的手段，已经如何执行缓存回收。</li>
+<li>脏页的产生，回写的条件，回写是交给专门的线程来执行的。</li>
+</ul>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>内存管理的重点其实是分为这几个部分</p>
+<ul>
+<li><p>虚拟内存</p>
+<ul>
+<li>为什么要有虚拟内存</li>
+<li>虚拟内存实现</li>
+</ul>
+<p>虚拟内存是基础，由此可以与各个部分进行结合。</p>
+</li>
+</ul>
+<blockquote>
+<p>与进程结合：进程内的虚拟内存——进程地址空间</p>
+</blockquote>
+<ul>
+<li>进程地址空间<ul>
+<li>地址空间布局</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>虚拟内存不是凭空而来的，内核如何去分配内存</p>
+</blockquote>
+<ul>
+<li>内存分配<ul>
+<li>伙伴算法</li>
+<li>分配页，分配字节</li>
+<li>slab缓存</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>虚拟内存当发生缺页中断，如何进行页面置换？如何能够提高页面置换效率以及页回写</p>
+</blockquote>
+<ul>
+<li>缺页中断</li>
+<li>页面置换算法<ul>
+<li>老化算法</li>
+<li>WSClock算法</li>
+</ul>
+</li>
+<li>页高速缓存</li>
+<li>脏页回写</li>
+</ul>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《现代操作系统》</li>
+<li>《Linux内核设计与实现》</li>
+</ul>
+]]></content>
       <categories>
         <category>操作系统</category>
       </categories>
