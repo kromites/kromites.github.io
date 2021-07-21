@@ -1296,7 +1296,220 @@
   <entry>
     <title>文件管理</title>
     <url>/posts/ae533703/</url>
-    <content><![CDATA[]]></content>
+    <content><![CDATA[<blockquote>
+<p>本篇文章介绍一下Linux系统中的文件系统和I/O设备，这两块的知识点很多，本篇只是简要介绍一下。</p>
+</blockquote>
+<span id="more"></span>
+
+<h3 id="虚拟文件系统"><a href="#虚拟文件系统" class="headerlink" title="虚拟文件系统"></a>虚拟文件系统</h3><p>​    虚拟文件系统(VFS)作为内核子系统，为用户空间程序提供了文件和文件系统相关的接口。系统中所有文件系统不但依赖VFS共存，而且也依靠VFS系统协同工作。系统中所有文件系统不但依赖VFS共存，而且也依靠VFS系统协同工作。</p>
+<h4 id="通用文件系统接口"><a href="#通用文件系统接口" class="headerlink" title="通用文件系统接口"></a>通用文件系统接口</h4><p>​    VFS为不同的文件系统和实际物理介质提供了相同的接口。用户可以对所有文件都使用read(), open(), write()这样的系统调用。这也是VFS最大的意义：<strong>将各种不同的文件系统抽象后采用统一的方式进行操作。</strong>下一章的块I/O设备支持各种各样的存储设备。<strong>VFS和块I/O相结合，使得用户空间调用统一的系统调用访问各种文件。</strong></p>
+<h4 id="文件系统抽象层"><a href="#文件系统抽象层" class="headerlink" title="文件系统抽象层"></a>文件系统抽象层</h4><p>​    之所以能使用通用接口对所有类型的文件系统进行操作，是因为内核在底层文件系统接口建立了一个抽象层。该抽象层定义了所有文件都支持的基本的概念上的接口和数据结构。从而隐藏了具体的实现细节。这样除了文件系统本身之外，上层调用者不需要知道实际的细节。</p>
+<img src="/posts/ae533703/%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%E7%9A%84%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8.png" class title="文件系统的系统调用">
+
+<p>​    </p>
+<h4 id="Unix文件系统"><a href="#Unix文件系统" class="headerlink" title="Unix文件系统"></a>Unix文件系统</h4><p>​    Unix使用了四种和文件系统相关的传统抽象概念：文件、目录项、索引节点（inode）和安装点(mount point)</p>
+<ul>
+<li>文件：是一个有序字节串。是文件的名字</li>
+<li>目录项：文件通过目录项组织。目录可以层层嵌套组成文件路径。VFS把目录当做文件对待，因此二者的执行和操作相同。</li>
+<li>索引节点：存储文件相关信息的数据结构。（权限、大小、拥有者、创建时间等）</li>
+<li>安装点：文件卷在目录层次内存在的位置</li>
+</ul>
+<p>超级块：文件系统的控制信息</p>
+<h4 id="VFS对象及其数据结构"><a href="#VFS对象及其数据结构" class="headerlink" title="VFS对象及其数据结构"></a>VFS对象及其数据结构</h4><p>​    VFS通过面向对象的设计思路，使用一组数据结构来代表通用文件对象。</p>
+<ul>
+<li>超级块对象：代表一个具体的已安装文件系统</li>
+<li>索引节点对象： 代表一个具体文件</li>
+<li>目录项对象：代表一个目录项，是路径的一个组成部分</li>
+<li>文件对象：<strong>由进程打开的文件。</strong></li>
+</ul>
+<p>每个对象都包含一个操作对象；</p>
+<ul>
+<li>super_operation对象，针对特定文件系统能调用的方法，如write_inode()和sync_fs()等</li>
+<li>inode_operation对象，针对特定文件的方法，如create()、link()</li>
+<li>dentry_operation对象，针对特定目录，如d_compare()和d_delete()</li>
+<li>file_operation对象，针对已打开文件，如read()和write()</li>
+</ul>
+<h4 id="超级块对象"><a href="#超级块对象" class="headerlink" title="超级块对象"></a>超级块对象</h4><p>​    所有文件都必须实现超级块对象，<strong>该对象用于存储特定文件系统的信息</strong>。结构体<code>super_lock</code>，通过<code>alloc_super()</code>创建并初始化。文件安装时文件系统会调用该函数以便从磁盘中读取超级块，并将其信息填充到内存中的超级块对象中。<strong>针对的层级是文件系统级。</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">super_block</span> &#123;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">s_list</span>;</span>		<span class="comment">/* Keep this first */</span></span><br><span class="line">	<span class="keyword">dev_t</span>			s_dev;		<span class="comment">/* search index; _not_ kdev_t */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">char</span>		s_blocksize_bits;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		s_blocksize;</span><br><span class="line">	<span class="keyword">loff_t</span>			s_maxbytes;	<span class="comment">/* Max file size */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">file_system_type</span>	*<span class="title">s_type</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">super_operations</span>	*<span class="title">s_op</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">dquot_operations</span>	*<span class="title">dq_op</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">quotactl_ops</span>	*<span class="title">s_qcop</span>;</span></span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">export_operations</span> *<span class="title">s_export_op</span>;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		s_flags;</span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		s_iflags;	<span class="comment">/* internal SB_I_* flags */</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span>		s_magic;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">dentry</span>		*<span class="title">s_root</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">rw_semaphore</span>	<span class="title">s_umount</span>;</span></span><br><span class="line">	<span class="keyword">int</span>			s_count;</span><br><span class="line">	<span class="keyword">atomic_t</span>		s_active;</span><br><span class="line">	<span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">xattr_handler</span> **<span class="title">s_xattr</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">hlist_bl_head</span>	<span class="title">s_roots</span>;</span>	<span class="comment">/* alternate root dentries for NFS */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>	<span class="title">s_mounts</span>;</span>	<span class="comment">/* list of mounts; _not_ for fs use */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">block_device</span>	*<span class="title">s_bdev</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">backing_dev_info</span> *<span class="title">s_bdi</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">mtd_info</span>		*<span class="title">s_mtd</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">hlist_node</span>	<span class="title">s_instances</span>;</span></span><br><span class="line">	.....</span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+
+<p>操作：</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">super_operations</span>&#123;</span></span><br><span class="line">    (*alloc_inode)(struct super_block *sb);</span><br><span class="line">    (*destroy_inode)(struct inode*);</span><br><span class="line">    (*dirty_inode)</span><br><span class="line">    (*write_inode)</span><br><span class="line">    (*drop_inode)</span><br><span class="line">    (*delete_inode)</span><br><span class="line">    (*put_inode)</span><br><span class="line">    (*write_inode)</span><br><span class="line">    (*sync_fs)</span><br><span class="line">    (*freeze_fs)</span><br><span class="line">    (*statfs)</span><br><span class="line">    <span class="comment">//...</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="索引节点对象"><a href="#索引节点对象" class="headerlink" title="索引节点对象"></a>索引节点对象</h4><p>​    <strong>索引节点对象包含了内核在操作文件或目录需要的全部信息。</strong>索引节点对象必须在内存中创建，以便于文件系统使用。</p>
+<p>一个inode代表文件系统中的一个文件，它也就可以是设备或管道这样的特殊文件。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">inode</span>&#123;</span></span><br><span class="line">	<span class="comment">//...</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 操作：</span></span><br><span class="line">create();</span><br><span class="line">link();		<span class="comment">// 硬链接</span></span><br><span class="line">symlink();	<span class="comment">//符号链接</span></span><br><span class="line">mkdir();</span><br><span class="line">rename();</span><br><span class="line">setattr();</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="目录项对象"><a href="#目录项对象" class="headerlink" title="目录项对象"></a>目录项对象</h4><p>目录项由dentry表示，与前面两个不同，<strong>目录项对象没有对应的磁盘数据结构，VFS根据字符串形式的路径名现场创建</strong>。</p>
+<ul>
+<li><p>目录项状态</p>
+<p><strong>被使用</strong>：对应有效的索引节点，存在使用者<br><strong>未被使用</strong>：该目录项指向有效对象，只是尚未使用，路径查找更迅速<br><strong>负状态</strong>：没有对应的有效索引，仍然保留，以快速解析以后的路径查询。</p>
+</li>
+<li><p>目录项缓存<br><strong>内核将目录项对象缓存在目录项缓存中(dcache)</strong>,目录项缓存包括三个主要部分：</p>
+<ul>
+<li><p>“被使用的”目录项链表。通过inode的i_dentry项关联。</p>
+</li>
+<li><p>“最近被使用的”双向链表。含有未被使用的和负状态的目录项。头部插入目录项，尾部删除。</p>
+</li>
+<li><p>散列表及其散列函数用于快速将路径解析为dentry，由dentry_hashtable表示，散列函数d_hash()，查找散列表通过d_lookup()</p>
+</li>
+</ul>
+<p>dcache一定意义也提供对inode的缓存，即icache，只要目录项被缓存，其相应的索引节点也就被缓存。</p>
+</li>
+<li><p>目录项操作<br>d_revalidate()：目录对象是否有效<br>d_hash()<br>d_compare()<br>d_delete()：目录项d_count计数值等于0时调用<br>d_release()：释放</p>
+</li>
+</ul>
+<h4 id="文件对象"><a href="#文件对象" class="headerlink" title="文件对象"></a>文件对象</h4><p>文件对象表示<strong>进程已经打开的文件,无实际磁盘数据对应</strong>。<strong>多个进程可以同时打开和操作同一个文件，虽然一个文件对应的文件对象不唯一，但其索引和目录项是唯一的。其f_dentry指针指向相关的目录项对象。目录项对象会指向inode节点，inode会记录文件是否dirty。</strong></p>
+<p>进程直接处理的是文件，而不是超级块、索引节点和目录项。</p>
+<p><strong>文件对象是已打开的文件在内存中的表示。该对象由open()系统调用创建。</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">file</span>&#123;</span></span><br><span class="line">…</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 文件操作file_operations:</span></span><br><span class="line"><span class="comment">                            llseek;</span></span><br><span class="line"><span class="comment">                            read;</span></span><br><span class="line"><span class="comment">                            write;</span></span><br><span class="line"><span class="comment">                            aio_read;</span></span><br><span class="line"><span class="comment">                            aio_write;</span></span><br><span class="line"><span class="comment">                            readdir;</span></span><br><span class="line"><span class="comment">                            ioctl：需要调用者持有BKL锁</span></span><br><span class="line"><span class="comment">                            unlocked_ioctl()：不需要加锁</span></span><br><span class="line"><span class="comment">                            mmap</span></span><br><span class="line"><span class="comment">                            open</span></span><br><span class="line"><span class="comment">                            flush</span></span><br><span class="line"><span class="comment">                            fsync</span></span><br><span class="line"><span class="comment">                            lock</span></span><br><span class="line"><span class="comment">*/</span></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="和文件系统相关的数据结构"><a href="#和文件系统相关的数据结构" class="headerlink" title="和文件系统相关的数据结构"></a>和文件系统相关的数据结构</h4><p>​    除了上面的VFS基础对象外，内核还使用了另外一些标准数据机构管理文件系统的其他数据。</p>
+<ol>
+<li>file_system_type：特定文件系统类型</li>
+<li>vfsmount：在安装点被创建，它还保存了安装时指定的标志信息，在mnt_flags域中</li>
+</ol>
+<h4 id="和进程相关的数据结构"><a href="#和进程相关的数据结构" class="headerlink" title="和进程相关的数据结构"></a>和进程相关的数据结构</h4><p>​    系统中每一个进程都有自己的一组打开的文件，像根文件系统、当前工作目录、安装点等。有3个数据结构将VFS和进程紧密联系在一起。</p>
+<ul>
+<li><p><code>file_struct</code></p>
+<p>该结构体由进程描述符中的files目录项指向。所有与单个进程相关的信息（如打开的文件及文件描述符）都包含在内。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">files_struct</span>&#123;</span></span><br><span class="line">	<span class="keyword">atomic_t</span>				count;					<span class="comment">// 结构使用计数</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">fdtable</span>			*<span class="title">fdt</span>;</span>					<span class="comment">// 指向其他fd表的指针</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">fdtable</span> 			*<span class="title">fdtab</span>;</span>					<span class="comment">// 基fd表</span></span><br><span class="line">    <span class="keyword">spinlock_t</span>				file_lock;				<span class="comment">// 单个文件的锁</span></span><br><span class="line">    <span class="keyword">int</span> 					next_fd;				<span class="comment">// 缓存下一个可用的fd</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">embedded_fd_set</span>	<span class="title">close_on_exec_init</span>;</span>		<span class="comment">// exce()时关闭的文件描述符链表</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">embedded_fd_set</span> 	<span class="title">open_fds_init</span>;</span>			<span class="comment">// 打开的文件描述符链表</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span>				*<span class="title">fd_array</span>[<span class="title">NR_OPEN_DEFAULT</span>]	// 缺省的文件对象数组</span></span><br><span class="line"><span class="class">&#125;;</span>	</span><br></pre></td></tr></table></figure></li>
+<li><p><code>fs_struct</code></p>
+<p>该结构由进程描述符的fs域指向。<strong>它包含文件系统和进程相关的信息。</strong></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">fs_struct</span>&#123;</span></span><br><span class="line">  	<span class="keyword">int</span> 					users;					<span class="comment">// 用户数目  </span></span><br><span class="line">    <span class="keyword">rwlock_t</span>				lock;					<span class="comment">// 保护该结构体的锁</span></span><br><span class="line">    <span class="keyword">int</span> 					umask;					<span class="comment">// 掩码</span></span><br><span class="line">    <span class="keyword">int</span> 					in_exec;				<span class="comment">// 当前正在执行的文件</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">path</span>				<span class="title">root</span>;</span>					<span class="comment">// 根目录路径</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">path</span>				<span class="title">pwd</span>;</span>					<span class="comment">// 当前工作目录的路径</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>包含了文件所在的工作目录路径和根目录路径</p>
+</li>
+<li><p><code>namespace</code>结构体</p>
+<p>它使得每个进程在系统中都看到唯一的安装文件系统——不仅是唯一的根目录，而且还是唯一的文件系统层次结构。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">mmt_namespace</span>&#123;</span></span><br><span class="line">  	<span class="keyword">atomic_t</span>				count;					<span class="comment">// 使用计数</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">vfsmount</span>			*<span class="title">root</span>;</span>					<span class="comment">// 根目录安装点对象</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>		<span class="title">list</span>;</span>					<span class="comment">// 安装点链表		连接已安装文件系统，包含的元素组成了全体命名空间。</span></span><br><span class="line">    <span class="keyword">wait_queue_head_t</span>		poll;					<span class="comment">// 轮询的等待队列</span></span><br><span class="line">    <span class="keyword">int</span>						event;					<span class="comment">// 时间计数</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+</ul>
+<p>上述的这些数据结构都是通过<strong>进程描述符</strong>连接的。对多数进程来说，它们的描述符都指向唯一的<code>files_struct</code>和<code>fs_struct</code>结构体。不过如果是线程的话，使用克隆标志<code>CLONE_FILES</code>或<code>CLONE_FS</code>创建的进程，那么会共享这个结构体。</p>
+<p><code>namespace</code>结构体的使用方法和前两种结构体完全不同，默认情况下，所有进程共享同样的命名空间（也就是说，他们都是从相同的挂载表中看到同一文件系统层次结构）。只有在clone()使用了<code>clone_news</code>标志，才会开辟新的命名空间。</p>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>​    本章介绍了VFS的目的，讨论了各种数据结构，包括最重要的索引节点、目录项以及超级块对象。对了，千万别忘了inode和fd之间的区别。</p>
+<p>下一章将介绍数据如何从物理上存放在文件系统中。</p>
+<h3 id="块I-O层"><a href="#块I-O层" class="headerlink" title="块I/O层"></a>块I/O层</h3><h4 id="块设备介绍"><a href="#块设备介绍" class="headerlink" title="块设备介绍"></a>块设备介绍</h4><p>这一章算是文件和设备的交界点。</p>
+<p>设备分为以下三种设备：</p>
+<ul>
+<li>字符设备：字符设备按照<strong>字符流的方式被有序访问</strong>（如键盘）</li>
+<li>块设备： 块设备能够<strong>随机访问固定大小的数据片</strong>（如硬盘，光驱、闪存等） 块设备是以安装<strong>文件系统</strong>的方式使用的——这也是块设备的一般访问方式。</li>
+<li>网络设备： 通过socket套接字去访问，支持字节流和数据包的形式访问。</li>
+</ul>
+<p>字符设备只需要控制一个位置——当前位置就能完成它的工作，而块设备访问的位置必须能够在介质的不同区间前后移动。而且<strong>块设备对执行性能要求很高</strong></p>
+<p><strong>块设备中最小寻址单位是扇区，一般大小为512B</strong>。不过<strong>块最小逻辑可寻址单元是块</strong>，一般来说都是<strong>基于块来访问文件系统</strong>。在逻辑层面上块就是最小单位。</p>
+<h4 id="缓冲区和缓冲区头"><a href="#缓冲区和缓冲区头" class="headerlink" title="缓冲区和缓冲区头"></a>缓冲区和缓冲区头</h4><p>当一个块被调入内存时（等待读入后或等待写出时），它要存储在一个缓冲区中。<strong>每个缓冲区和一个块对应，相当于是磁盘块在内存中的表示。</strong></p>
+<p>块包含一个或多个扇区，但大小不能超过一个页面，所以一个页可以容纳一个到多个页之间（一页4KB）。由于内核在处理数据时需要一些相关的控制信息（如块属于哪个设备，块对应哪个缓冲区等），因此每个缓冲区都有一个对应的描述符，描述符用<strong>buffer_head</strong>表示。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;linux/buffer_head.h&gt;</span></span></span><br><span class="line"><span class="comment">// 包含了内核操作缓冲区所需要的的全部信息</span></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">buffer_head</span> &#123;</span></span><br><span class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> b_state;		<span class="comment">/* buffer state bitmap (see above) 缓冲区状态标志*/</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">buffer_head</span> *<span class="title">b_this_page</span>;</span><span class="comment">/* circular list of page&#x27;s buffers 页面中的缓冲区*/</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">page</span> *<span class="title">b_page</span>;</span>		<span class="comment">/* the page this bh is mapped to存储缓冲区的页面 */</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">sector_t</span> b_blocknr;		<span class="comment">/* start block number 起始块号*/</span></span><br><span class="line">	<span class="keyword">size_t</span> b_size;			<span class="comment">/* size of mapping映像的大小 */</span></span><br><span class="line">	<span class="keyword">char</span> *b_data;			<span class="comment">/* pointer to data within the page页面内的数据指针 */</span></span><br><span class="line"></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">block_device</span> *<span class="title">b_bdev</span>;</span>		<span class="comment">// 相关联的块设备</span></span><br><span class="line">	<span class="keyword">bh_end_io_t</span> *b_end_io;		<span class="comment">/* I/O completion  I/O完成方法 */</span></span><br><span class="line"> 	<span class="keyword">void</span> *b_private;		<span class="comment">/* reserved for b_end_io io完成方法*/</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">b_assoc_buffers</span>;</span> <span class="comment">/* associated with another mapping 相关的一个映射链表*/</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> *<span class="title">b_assoc_map</span>;</span>	<span class="comment">/* mapping this buffer is  相关的地址空间</span></span><br><span class="line"><span class="comment">						   associated with */</span></span><br><span class="line">	<span class="keyword">atomic_t</span> b_count;		<span class="comment">/* users using this buffer_head */</span>缓冲区使用计数</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>(1). b_state域表示缓冲区的状态。合法的标识存放在bh_state_bits中<br>(2). b_count<br>在操作缓冲区头之前，应先使用get_bh()增加引用，确保该缓冲区头不会再被分配出去；完成操作之后，put_bh()减少引用计数。<br>(3). b_blocknr-th是缓冲区对应的磁盘物理块的逻辑块号<br>(4). b_page是缓冲区对应的内存物理页<br>(5). b_data直接指向响应的块（位于b_page域所指明的页面中的某个位置上），块在内存中的起始位置在b_data处，结束在(b_data + b_size) 处</p>
+<p>总之，缓冲区头的目的在于<strong>描述磁盘块和物理内存缓冲区（在特定页面上的字节序列）之间的映射关系</strong>。这个结构体在内核中只扮演一个从缓冲区到块的映射关系的作用。</p>
+<p>缓冲区的缺点：</p>
+<p>(1). 缓冲区头很大且是不易控制的数据结构<br>(2). 仅能描述单个缓冲区，当作为I/O容器使用时，将大块数据的I/O操作分解为对多个buffer head的操作。</p>
+<h4 id="BIO结构体"><a href="#BIO结构体" class="headerlink" title="BIO结构体"></a>BIO结构体</h4><p>​    内核中<strong>块I/O操作的基本容器</strong>由BIO结构体表示。该结构体代表了正在活动的以segment链表形式组织的块I/O操作。 <strong>一个片段是一小块连续的内存缓冲区</strong>。这样就不代表单个缓冲区一定要连续。</p>
+<ul>
+<li><p>结构体</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">bio</span>&#123;</span></span><br><span class="line">    <span class="comment">//...</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>bio结构体主要是代表正在现场执行的I/O操作，重要的几个域是bi_io_vecs、bi_vcnt和bi_idx。</p>
+</li>
+<li><p>bio_io_vec结构体<br><strong>bio_io_vec结构体数组指向一个bio_vec结构体数组，表示一个完整的缓冲区</strong>。bio_vec结构指明&lt;page, offset, len&gt;</p>
+</li>
+<li><p>bi_cnt引用计数<br>如果该值为0，则撤销该bio结构体，释放内存。通过：</p>
+<ul>
+<li>bio_get(bio)</li>
+<li>bio_put(bio)</li>
+</ul>
+<p>进行管理，在操作正在活动的bio结构体时，一定要先增加它的引用计数，以免操作时bio被释放；操作完毕后，减少引用计数。</p>
+</li>
+<li><p>bi_private<br>创建者的私有域</p>
+</li>
+</ul>
+<ul>
+<li><p>新老方法对比</p>
+<ul>
+<li><p>缓冲区头</p>
+<p><strong>代表的是一个缓冲区</strong>，描述的是磁盘的一个块，<strong>关联的是单独页中的单独磁盘块</strong>，所以它可能会引起不必要的分割，将请求按块为单位进行划分，之后再重新组合。</p>
+<p>数据结构来说是重量级</p>
+</li>
+<li><p>bio结构体</p>
+<p><strong>代表的是I/O操作</strong>，<strong>可以包括内存中的一个或多个页</strong>，不需要连续存储，也不需要分割I/O操作</p>
+<p>数据结构来说是轻量级</p>
+</li>
+</ul>
+</li>
+<li><p>使用BIO的优点</p>
+<ul>
+<li>bio很容易处理高端内存，因为它处理的是物理页而不是直接指针。</li>
+<li>bio结构体既可以代表普通页I/O，同时也可以代表直接I/O。</li>
+<li>bio结构体便于执行分散-集中的块I/O操作</li>
+<li>bio结构体较为轻量。因为它只需要包含块I/O操作所需信息。</li>
+</ul>
+</li>
+</ul>
+<h4 id="请求队列"><a href="#请求队列" class="headerlink" title="请求队列"></a>请求队列</h4><p>​    块设备将它们挂起的块I/O操作请求保存在请求队列<code>reques_queue</code>结构体中。该结构体包含一个双向请求链表以及相关控制信息。</p>
+<p>​    请求队列只要不为空，队列对应的<strong>块设备驱动程序就会从队列头获取请求</strong>，然后将其送入对应的块设备中。请求可以有多个bio结构体组成。</p>
+<h4 id="I-O调度程序"><a href="#I-O调度程序" class="headerlink" title="I/O调度程序"></a>I/O调度程序</h4><p>​    如果简单的以内核产生请求的顺序直接将请求发送给块设备的话，性能肯定很低。</p>
+<p>​    <strong>磁盘寻址是整个计算机中最慢的操作之一。</strong>所以要提升性能首先得尽量缩短寻址时间。</p>
+<p>​    为了优化寻址，内核在将请求提交给磁盘前，先执行名为<strong>合并与排序的预操作</strong>，这种预操作能够极大提升系统的性能。</p>
+<p>​    <strong>在内核中负责提交I/O请求的子系统叫做I/O调度程序</strong>：I/O调度程序将<strong>磁盘I/O资源分配给系统中所有挂起的块I/O请求</strong>。资源分配的方式正是合并和排序。</p>
+<ul>
+<li><p>工作</p>
+<p><strong>I/O调度程序的工作是管理块设备的请求队列</strong>。它决定队列中的请求排序顺序以及在什么时候发请求到块设备。</p>
+<p>以下是两种能够减少磁盘寻址时间的操作：</p>
+<ul>
+<li><p>合并操作</p>
+<p>如果两个或多个请求访问的磁盘扇区相同的话，那么将它们合并成一个请求。 这样能够缩短请求数目，减少磁盘寻址次数。</p>
+<p>合并分为向前合并和向后合并。这看两个扇区之前的相对位置。</p>
+</li>
+<li><p>排序操作</p>
+<p>整个请求队列将按扇区增长方向有序排列。这样可以保证<strong>磁盘头以直线方向移动寻址</strong>，从而缩短了所有磁盘寻址时间。</p>
+<p>这种排序算法与电梯调度类似，因此I/O调度程序又被称为地奥体调度。</p>
+</li>
+</ul>
+</li>
+<li><p>linux电梯调度</p>
+<p>当一个请求加入到队列中时，有可能发生下面四种操作。</p>
+<ul>
+<li>如果队列中已存在一个对相邻磁盘扇区操作的请求，那么新请求和现在请求合并为一个请求。        —&gt;    合并</li>
+<li><strong>如果队列中存在一个驻留时间过长的请求，那么新请求将被插入队尾，保证旧请求的产生饥饿。</strong>    —-&gt;   饥饿避免</li>
+<li>如果队列中以扇区方向为序存在合适的插入位置，那么新的请求会插入到这个位置，使得队列一直有序        —&gt; 排序</li>
+<li>如果队列中没有适合的位置，那么请求被插入到队列尾部。</li>
+</ul>
+</li>
+<li><p>最终期限I/O调度程序</p>
+<p>电梯调度有个缺点——旧请求的饥饿问题。而如果是读操作，一般是和系统同步发生的，这样一来读请求饥饿的话，会使系统长时间不响应。<strong>因此读请求能够直接影响系统性能。</strong>如果在该位置请求过了，然后又需要对该位置进行读请求，这样调度程序只能回过来再次进行该位置的寻址，这样就寻址了两次。</p>
+<p>在该调度程序中。每个请求都有一个超时时间，读操作为0.5s,写操作为5s。这样调度程序实现了另外两个队列——读FIFO和写FIFO。在请求超时时间到达之前，系统必须牺牲一部分磁盘读取性能来处理这些请求。</p>
+</li>
+<li><p>预测I/O调度程序</p>
+<p>上一个调度程序同样带来了缺点，系统的吞吐量降低了。预测I/O调度程序在此基础上增加了<strong>预测启发</strong>的能力</p>
+<p>预测调度在提交一个请求后并不直接返回去处理其他请求，而是有意空闲几ms，等待是否有该位置的读请求出现，如果有直接执行，如果没有，返回处理其他请求。这个等待只会造成轻微损失。<strong>如果能够正确预测应用程序和文件系统的行为，那么这个会大大减少服务读请求所需的寻址开销。</strong></p>
+<p>预测I/O调度程序是linux内核中缺省的I/O调度程序。</p>
+</li>
+</ul>
+<ul>
+<li><p>空操作I/O调度程序</p>
+<p>该种操作不进行排序，只进行合并。该种调度方式用在闪存等块设备上。因为这种硬件是真正的随机访问，因此没必要进行排序。</p>
+</li>
+</ul>
+<h4 id="小结-1"><a href="#小结-1" class="headerlink" title="小结"></a>小结</h4><p>​    本结先介绍块设备是什么，然后对两种缓冲区的结构进行对比（<strong>bio，表示活动的I/O操作； buffer_head，表示块到页的映射</strong>）。然后讨论了请求结构，之后我们重点讨论了内核对请求的调度——I/O调度程序。</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《Linux内核设计与实现》</li>
+<li>《现代操作系统》</li>
+</ul>
+]]></content>
+      <categories>
+        <category>操作系统</category>
+      </categories>
+      <tags>
+        <tag>文件</tag>
+        <tag>VFS</tag>
+        <tag>I/O</tag>
+      </tags>
   </entry>
   <entry>
     <title>内存管理</title>
