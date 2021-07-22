@@ -130,11 +130,13 @@
 <meta property="og:site_name" content="Kromite">
 <meta property="og:description" content="本篇文章介绍一下HTTP的基础知识。主要涉及方面有HTTP报文，HTTPS，HTTP2.0的改进等">
 <meta property="og:locale">
+<meta property="og:image" content="http://kromites.github.io/posts/a1ede006/%E6%B5%81%E7%A8%8B%E5%9B%BE.png">
 <meta property="article:published_time" content="2021-07-13T06:41:02.000Z">
-<meta property="article:modified_time" content="2021-07-16T07:21:18.463Z">
+<meta property="article:modified_time" content="2021-07-22T15:02:26.528Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="HTTP">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://kromites.github.io/posts/a1ede006/%E6%B5%81%E7%A8%8B%E5%9B%BE.png">
 
 
 
@@ -758,14 +760,15 @@
 </li>
 <li><p>多路复用：在封装成帧的概念下，帧里面有流ID和优先级，可以实现多个请求同时传输多个结果同时处理，而且可以ABA（先发A的上半部，再发B，再发B的下半部）这样发请求报文。再加上优先级的概念，这样处理请求可以完全实现多路复用。</p>
 </li>
-<li><p>头部压缩：。HTTP/2.0 通过 gzip 和 compress 压缩头部然后再发送，同时通信双方会维护一张头信息表，所有字段都记录在这张表中，在每次 HTTP 传输时只需要传头字段在表中的索引即可，大大减小了重传次数和数据量。</p>
+<li><p>头部压缩：HTTP/2.0 通过 gzip 和 compress 压缩头部然后再发送，同时通信双方会维护一张头信息表，所有字段都记录在这张表中，在每次 HTTP 传输时只需要传头字段在表中的索引即可，大大减小了重传次数和数据量。</p>
 </li>
 <li><p>服务器推送。 服务器在客户端未经请求许可的情况下，可预先向客户端推送需要的内容，客户端在退出服务时可通过发送复位相关的请求来取消服务端的推送。</p>
 </li>
 </ul>
 <h3 id="其它"><a href="#其它" class="headerlink" title="其它"></a>其它</h3><p>这里来个经典问题</p>
 <p>网页解析全过程【用户输入网址到显示对应页面的全过程】</p>
-<p>% asset_img 流程图.png 复制构造循环引用 %}</p>
+<img src="/posts/a1ede006/%E6%B5%81%E7%A8%8B%E5%9B%BE.png" class title="流程图">
+
 <p>从上图可以看出一般分为以下几个部分</p>
 <ol>
 <li><p><strong>解析域名</strong>：当用户输入一个网址并按下回车键的时候，浏览器会获得一个域名，而通信首先需要通过域名去找到服务器的IP地址。一般是根据DNS协议去查找IP地址。</p>
