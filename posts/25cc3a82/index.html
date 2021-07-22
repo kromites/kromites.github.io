@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic|Robota Slab:300,300italic,400,400italic,700,700italic|Lobster Two:300,300italic,400,400italic,700,700italic|PT Mono:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css" />
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="Redis,分布式,主从复制,哨兵,集群," />
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="本篇文章介绍一下Redis多机数据库的实现，主要内容有主从复制，哨兵机制和cluster集群，这些多机特性能够让Redis很好的实现分布式数据库。由于是多机，目前没有接触过，所以记录的都是书本上的知识。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis多机">
+<meta property="og:url" content="http://kromites.github.io/posts/25cc3a82/index.html">
+<meta property="og:site_name" content="Kromite">
+<meta property="og:description" content="本篇文章介绍一下Redis多机数据库的实现，主要内容有主从复制，哨兵机制和cluster集群，这些多机特性能够让Redis很好的实现分布式数据库。由于是多机，目前没有接触过，所以记录的都是书本上的知识。">
+<meta property="og:locale">
+<meta property="article:published_time" content="2021-07-22T06:33:01.000Z">
+<meta property="article:modified_time" content="2021-07-22T11:03:04.122Z">
+<meta property="article:author" content="Kromite">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="分布式">
+<meta property="article:tag" content="主从复制">
+<meta property="article:tag" content="哨兵">
+<meta property="article:tag" content="集群">
+<meta name="twitter:card" content="summary">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '',
+    scheme: 'Mist',
+    version: '5.1.4',
+    sidebar: {"position":"right","display":"post","offset":12,"b2t":false,"scrollpercent":true,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://kromites.github.io/posts/25cc3a82/"/>
+
+
+
+
+
+  <title>Redis多机 | Kromite</title>
+  
+
+
+
+
+
+
+
+
+<meta name="generator" content="Hexo 5.4.0"></head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-right page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Kromite</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Record bit by bit</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocomplete="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/25cc3a82/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Kromite">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Redis多机</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+          
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-22T14:33:01+08:00">
+                2021-07-22
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Redis/" itemprop="url" rel="index">
+                    <span itemprop="name">Redis</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/posts/25cc3a82/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/posts/25cc3a82/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+            <div class="post-wordcount">
+              
+                
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-file-word-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">字数统计&#58;</span>
+                
+                <span title="字数统计">
+                  2k
+                </span>
+              
+
+              
+                <span class="post-meta-divider">|</span>
+              
+
+              
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-clock-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">阅读时长 &asymp;</span>
+                
+                <span title="阅读时长">
+                  6
+                </span>
+              
+            </div>
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <blockquote>
+<p>本篇文章介绍一下Redis多机数据库的实现，主要内容有主从复制，哨兵机制和cluster集群，这些多机特性能够让Redis很好的实现分布式数据库。由于是多机，目前没有接触过，所以记录的都是书本上的知识。</p>
+</blockquote>
+<span id="more"></span>
+
+<h3 id="复制"><a href="#复制" class="headerlink" title="复制"></a>复制</h3><h4 id="复制介绍"><a href="#复制介绍" class="headerlink" title="复制介绍"></a>复制介绍</h4><p>​    在Redis中，用户可以通过执行<code>SLAVEOF</code>命令或者设置<code>slaveof</code>选项，让一个服务器去复制另一个服务器。</p>
+<ul>
+<li>主服务器：被复制的服务器</li>
+<li>从服务器：复制的服务器</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> now there are two redis servers : 127.0.0.1:6379, 127.0.0.1:12345</span></span><br><span class="line">127.0.0.1:12345&gt; SLAVEOF 127.0.0.1:6379</span><br><span class="line"><span class="meta">#</span><span class="bash"> main server: 6379</span> </span><br></pre></td></tr></table></figure>
+
+<p>进行复制中的主从服务器双方的数据库将保存相同的数据，概念上称作数据库状态一致。</p>
+<p><strong>通过<code>slaveof</code>命令连接的服务器，修改主服务器数据，会将从服务器数据也修改。</strong></p>
+<h4 id="旧版复制"><a href="#旧版复制" class="headerlink" title="旧版复制"></a>旧版复制</h4><p>Redis的复制功能分为同步和命令传播两个操作：</p>
+<ul>
+<li>同步操作：用于将从服务器的数据库状态更新至主服务器当前所处的数据库状态</li>
+<li>命令传播：主服务器状态被修改，导致主从服务器不处于一致状态，让主从服务器的数据库重新回到一致状态。</li>
+</ul>
+<h5 id="同步"><a href="#同步" class="headerlink" title="同步"></a>同步</h5><p>​    同步操作是需要从服务器对主服务器发送<code>SYNC</code>命令来完成。以下是该命令的执行步骤</p>
+<ul>
+<li><p>从服务器给主服务器发送SYNC命令</p>
+</li>
+<li><p><strong>收到SYNC命令的主服务器执行BGSAVE命令，在后台生成一个RDB文件，并使一个缓冲区记录从现在开始执行的所有写命令。</strong></p>
+</li>
+<li><p>当主服务器的BGSAVE命令执行完毕时，主服务器将BGSAVE命令生成的RDB文件发送给从服务器，从服务器加载该文件，使得从服务器的状态和执行BGSAVE命令的主服务器状态一致</p>
+</li>
+<li><p>主服务器将缓冲区的所有写命令发送给从服务器，从服务器执行这些命令将状态恢复到一致。</p>
+</li>
+</ul>
+<p>总结： 主服务器执行BGSAVE生成RDB文件，然后将执行命令中的写命令也发过去，相当于RDB+写补丁。</p>
+<h5 id="命令传播"><a href="#命令传播" class="headerlink" title="命令传播"></a>命令传播</h5><p>​    主服务器将要执行的写命令发送给从命令。</p>
+<h5 id="缺陷"><a href="#缺陷" class="headerlink" title="缺陷"></a>缺陷</h5><ul>
+<li><p>初次复制：从服务器没有复制过该主服务器，那么这样做可以。</p>
+</li>
+<li><p>断线后重复制： 因网络原因中断了复制，重新连接之后继续复制，这样的话<strong>同步效率很低</strong>。</p>
+</li>
+<li><p><strong>SYNC命令很耗费资源</strong>，因为会执行BGSAVE和发送RDB文件。因此Redis有必要保证真正有需要时才执行SYNC命令。</p>
+</li>
+</ul>
+<h4 id="新版复制"><a href="#新版复制" class="headerlink" title="新版复制"></a>新版复制</h4><p>​    为了解决旧版复制的低效问题，Redis将PSYNC代替SYNC执行同步操作。</p>
+<p>​    PSYNC拥有两个模式：</p>
+<ul>
+<li><strong>完整重同步</strong>：和上文同步一样，用于<strong>处理初次复制</strong>。</li>
+<li><strong>部分重同步</strong>：<strong>处理断线后重复制</strong></li>
+</ul>
+<h4 id="部分重同步"><a href="#部分重同步" class="headerlink" title="部分重同步"></a>部分重同步</h4><p>​    该功能由以下三部分组成：</p>
+<ul>
+<li>主服务器的复制偏移量和从服务器复制偏移量</li>
+<li>主服务器的复制积压缓冲区</li>
+<li>服务器的运行ID</li>
+</ul>
+<p><strong>复制偏移量</strong>：主服务器每次向从和服务器传播N个字节，主服务器偏移量+N，从服务器收到N字节，从服务器偏移量+N。</p>
+<p>根据偏移量，那么程序很容易知道<strong>主从服务器是否处于一致——偏移量相同就一致</strong></p>
+<p><strong>复制积压缓冲区</strong>： 一个固定长度的队列，写命令不仅发给从服务器，还会入队，保存写命令缓冲。如果断线重连之后，会查看偏移量是否在缓冲区中，在的话就执行部分重同步。</p>
+<p><strong>服务器运行ID</strong>: </p>
+<ul>
+<li>每个服务器运行ID都不同，从服务器会在第一次复制的时候保留主服务器的运行ID，这样才能正确找到主服务器。</li>
+<li>通过主服务器ID从服务器可以明确知道这次同步是不是第一次同步，如果是，那就执行完全同步，如果不是，那就执行部分重同步。</li>
+</ul>
+<h4 id="复制流程"><a href="#复制流程" class="headerlink" title="复制流程"></a>复制流程</h4><ul>
+<li>设置主服务器的地址和端口</li>
+<li>建立套接字连接</li>
+<li>发送PING命令，确认连接已经建立并能够收到从服务器请求。</li>
+<li>身份验证，如果有安全选项的话</li>
+<li>发送端口信息</li>
+<li><strong>同步</strong></li>
+<li><strong>命令传播</strong></li>
+<li>心跳检测</li>
+</ul>
+<h4 id="重点回顾"><a href="#重点回顾" class="headerlink" title="重点回顾"></a>重点回顾</h4><p>​    本章主要讲了讲Redis服务器主从复制，其实主从复制核心是一个命令<code>PSYNC</code>，两个步骤——同步和命令传播。在同步中又有部分同步和完全同步。把握住这些基本上就没问题了。</p>
+<h3 id="Sentinel"><a href="#Sentinel" class="headerlink" title="Sentinel"></a>Sentinel</h3><h4 id="哨兵介绍"><a href="#哨兵介绍" class="headerlink" title="哨兵介绍"></a>哨兵介绍</h4><p>​    哨兵是Redis高可用性的解决方案：由一个或多个哨兵实例组成的哨兵系统可以监视任意多个主服务器，以及这些主服务器属下的所有从服务器，并在被监视的主服务器进入下线状态时，自动将下线主服务器属下的某个从服务器升级为新的主服务器，然后由新的主服务器代替已下线的主服务器继续处理命令请求。</p>
+<p>​    <strong>主服务器进入下线状态时，哨兵系统会选举领头哨兵，然后执行故障转移操作。</strong></p>
+<p>​    哨兵也是一个Redis服务器，只不过其运行在特殊模式下，该模式下的服务器没有数据库，因此在启动的时候并不会载入RDB或者AOF文件。</p>
+<h4 id="哨兵功能"><a href="#哨兵功能" class="headerlink" title="哨兵功能"></a>哨兵功能</h4><p>​    哨兵是有着专门的代码，在使用了哨兵专用代码后，服务器会初始化一个<code>sentinel.c/sentinelState</code>结构（简称Sentinel状态），该结构保存了服务器中所有和Sentinel功能相关的状态。以下就来说一下相关的功能</p>
+<ul>
+<li><p>masters属性</p>
+<p><strong>masters字典记录这所有被该Sentinel监视的主服务器的相关消息。</strong></p>
+<ul>
+<li>字典的键是被监视的主服务器的名字</li>
+<li>字典的值则是被监视主服务器的<code>sentinel.c/sentinelRedisInstance</code>结构。该结构代表着一个被监视的服务器实例，这个实例可以是主、从服务器，或另外一个Sentinel。</li>
+</ul>
+</li>
+<li><p>两个连接：Sentinel会对监视的主服务器创建两个连接</p>
+<ul>
+<li>命令连接：专门向主服务器发送命令，并接收命令回复。</li>
+<li>订阅连接：专门订阅主服务器的<code>__sentinel__:hello</code>频道。</li>
+</ul>
+<p>为什么用两个连接？ 因为被发送的订阅消息都不会保存在Redis服务器里面，如果信息发送时，想要接收该信息的客户端不在线或者断线，那么这个客户端就会丢失该信息。因此为了不丢失信息，将订阅信息来放到哨兵中去接收。</p>
+<ul>
+<li>连接都是异步连接</li>
+</ul>
+</li>
+<li><p>获取主服务器信息</p>
+<p>每十秒一次，通过发送INFO命令，来获取主服务器的当前信息。</p>
+<ul>
+<li>首先是获得主服务器本身的信息。</li>
+<li>其次是获得主服务器属下所有从服务器的信息。</li>
+</ul>
+</li>
+<li><p>获取从服务器信息</p>
+<p>当哨兵发现主服务器有新的从服务器出现时，哨兵除了会为这个新的从服务器创建相应的实例结构之外，还会创建连接到从服务器（命令和订阅连接）</p>
+</li>
+</ul>
+<h4 id="服务器下线"><a href="#服务器下线" class="headerlink" title="服务器下线"></a>服务器下线</h4><h4 id="选举领头哨兵"><a href="#选举领头哨兵" class="headerlink" title="选举领头哨兵"></a>选举领头哨兵</h4><h4 id="故障转移"><a href="#故障转移" class="headerlink" title="故障转移"></a>故障转移</h4><h3 id="集群"><a href="#集群" class="headerlink" title="集群"></a>集群</h3><h4 id="集群介绍"><a href="#集群介绍" class="headerlink" title="集群介绍"></a>集群介绍</h4><h4 id="重新分片"><a href="#重新分片" class="headerlink" title="重新分片"></a>重新分片</h4><h4 id="复制与故障转移"><a href="#复制与故障转移" class="headerlink" title="复制与故障转移"></a>复制与故障转移</h4><h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《Redis设计与实现》</li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+  <div>
+    
+      <div>
+    
+        <div style="text-align:center;color: #ccc;font-size:14px;">-------------本文结束<i class="fa fa-paw"></i>感谢您的阅读-------------</div>
+    
+</div>
+
+    
+  </div>
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Redis/" rel="tag"><i class="fa fa-tag"></i> Redis</a>
+          
+            <a href="/tags/%E5%88%86%E5%B8%83%E5%BC%8F/" rel="tag"><i class="fa fa-tag"></i> 分布式</a>
+          
+            <a href="/tags/%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6/" rel="tag"><i class="fa fa-tag"></i> 主从复制</a>
+          
+            <a href="/tags/%E5%93%A8%E5%85%B5/" rel="tag"><i class="fa fa-tag"></i> 哨兵</a>
+          
+            <a href="/tags/%E9%9B%86%E7%BE%A4/" rel="tag"><i class="fa fa-tag"></i> 集群</a>
+          
+        </div>
+      
+
+      
+      
+        <div class="post-widgets">
+        
+
+        
+
+        
+          
+          <div id="needsharebutton-postbottom">
+            <span class="btn">
+              <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </span>
+          </div>
+        
+        </div>
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/posts/5edc58a6/" rel="next" title="Redis服务器">
+                <i class="fa fa-chevron-left"></i> Redis服务器
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+    <div class="comments" id="comments">
+    </div>
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <img class="site-author-image" itemprop="image"
+                src="/images/avatar.gif"
+                alt="" />
+            
+              <p class="site-author-name" itemprop="name"></p>
+              <p class="site-description motion-element" itemprop="description"></p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">33</span>
+                  <span class="site-state-item-name">日志</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-categories">
+                <a href="/categories/index.html">
+                  <span class="site-state-item-count">9</span>
+                  <span class="site-state-item-name">分类</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                <a href="/tags/index.html">
+                  <span class="site-state-item-count">56</span>
+                  <span class="site-state-item-name">标签</span>
+                </a>
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/kromites" target="_blank" title="GitHub">
+                      
+                        <i class="fa fa-fw fa-github"></i>GitHub</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:chouwu9@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+            <div class="links-of-blogroll motion-element links-of-blogroll-block">
+              <div class="links-of-blogroll-title">
+                <!-- modify icon to fire by szw -->
+                <i class="fa fa-history fa-" aria-hidden="true"></i>
+                近期文章
+              </div>
+              <ul class="links-of-blogroll-list">
+                
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/25cc3a82/" title="Redis多机" target="_blank">Redis多机</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/5edc58a6/" title="Redis服务器" target="_blank">Redis服务器</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/912da1e/" title="Redis事件" target="_blank">Redis事件</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/e28a809/" title="AOF持久化" target="_blank">AOF持久化</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/5f64b03b/" title="RDB持久化" target="_blank">RDB持久化</a>
+                  </li>
+                
+              </ul>
+            </div>
+          
+
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%8D%E5%88%B6"><span class="nav-number">1.</span> <span class="nav-text">复制</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%8D%E5%88%B6%E4%BB%8B%E7%BB%8D"><span class="nav-number">1.1.</span> <span class="nav-text">复制介绍</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%97%A7%E7%89%88%E5%A4%8D%E5%88%B6"><span class="nav-number">1.2.</span> <span class="nav-text">旧版复制</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#%E5%90%8C%E6%AD%A5"><span class="nav-number">1.2.1.</span> <span class="nav-text">同步</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E5%91%BD%E4%BB%A4%E4%BC%A0%E6%92%AD"><span class="nav-number">1.2.2.</span> <span class="nav-text">命令传播</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E7%BC%BA%E9%99%B7"><span class="nav-number">1.2.3.</span> <span class="nav-text">缺陷</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%96%B0%E7%89%88%E5%A4%8D%E5%88%B6"><span class="nav-number">1.3.</span> <span class="nav-text">新版复制</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%83%A8%E5%88%86%E9%87%8D%E5%90%8C%E6%AD%A5"><span class="nav-number">1.4.</span> <span class="nav-text">部分重同步</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%8D%E5%88%B6%E6%B5%81%E7%A8%8B"><span class="nav-number">1.5.</span> <span class="nav-text">复制流程</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%87%8D%E7%82%B9%E5%9B%9E%E9%A1%BE"><span class="nav-number">1.6.</span> <span class="nav-text">重点回顾</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Sentinel"><span class="nav-number">2.</span> <span class="nav-text">Sentinel</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%93%A8%E5%85%B5%E4%BB%8B%E7%BB%8D"><span class="nav-number">2.1.</span> <span class="nav-text">哨兵介绍</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%93%A8%E5%85%B5%E5%8A%9F%E8%83%BD"><span class="nav-number">2.2.</span> <span class="nav-text">哨兵功能</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%9C%8D%E5%8A%A1%E5%99%A8%E4%B8%8B%E7%BA%BF"><span class="nav-number">2.3.</span> <span class="nav-text">服务器下线</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%80%89%E4%B8%BE%E9%A2%86%E5%A4%B4%E5%93%A8%E5%85%B5"><span class="nav-number">2.4.</span> <span class="nav-text">选举领头哨兵</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%95%85%E9%9A%9C%E8%BD%AC%E7%A7%BB"><span class="nav-number">2.5.</span> <span class="nav-text">故障转移</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%9B%86%E7%BE%A4"><span class="nav-number">3.</span> <span class="nav-text">集群</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%9B%86%E7%BE%A4%E4%BB%8B%E7%BB%8D"><span class="nav-number">3.1.</span> <span class="nav-text">集群介绍</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%87%8D%E6%96%B0%E5%88%86%E7%89%87"><span class="nav-number">3.2.</span> <span class="nav-text">重新分片</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%8D%E5%88%B6%E4%B8%8E%E6%95%85%E9%9A%9C%E8%BD%AC%E7%A7%BB"><span class="nav-number">3.3.</span> <span class="nav-text">复制与故障转移</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">4.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">kromite</span>
+
+  
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-area-chart"></i>
+    </span>
+    
+      <span class="post-meta-item-text">Site words total count&#58;</span>
+    
+    <span title="Site words total count">96.2k</span>
+  
+</div>
+<!--
+
+  <div class="powered-by">由 <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a> 强力驱动</div>
+
+
+
+
+
+
+-->
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+          <span id="scrollpercent"><span>0</span>%</span>
+        
+      </div>
+    
+
+    
+      <div id="needsharebutton-float">
+        <span class="btn">
+          <i class="fa fa-share-alt" aria-hidden="true"></i>
+        </span>
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/canvas-nest/canvas-nest.min.js"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  <script src="//cdn1.lncld.net/static/js/3.0.4/av-min.js"></script>
+  <script src="/js/src/Valine.min.js"></script>
+  
+  <script type="text/javascript">
+    new Valine({
+        lang: 'zh-cn',
+        admin_email:'480133937@qq.com', //填写博主邮箱 
+        el: '#comments' ,
+        appId: '13aTGA3gDu8Gibktc3NPEo53-gzGzoHsz',
+        appKey: '7IKWdcFuKxDvzojhVxVwYJtG',
+        emoticon_url: 'https://cloud.panjunwen.com/alu',
+        emoticon_list: ["狂汗.png","不说话.png","汗.png","坐等.png","献花.png","不高兴.png","中刀.png","害羞.png","皱眉.png","小眼睛.png","暗地观察.png"],
+        placeholder: 'Please comment here',
+  });
+  </script>
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    var isXml = true;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    } else if (/json$/i.test(search_path)) {
+      isXml = false;
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      var $localSearchInput = $('#local-search-input');
+      $localSearchInput.attr("autocapitalize", "none");
+      $localSearchInput.attr("autocorrect", "off");
+      $localSearchInput.focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+
+      // start loading animation
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay">' +
+          '<div id="search-loading-icon">' +
+          '<i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>' +
+          '</div>' +
+          '</div>')
+        .css('overflow', 'hidden');
+      $("#search-loading-icon").css('margin', '20% auto 0 auto').css('text-align', 'center');
+
+      $.ajax({
+        url: path,
+        dataType: isXml ? "xml" : "json",
+        async: true,
+        success: function(res) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = isXml ? $("entry", res).map(function() {
+            return {
+              title: $("title", this).text(),
+              content: $("content",this).text(),
+              url: $("url" , this).text()
+            };
+          }).get() : res;
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+
+          // remove loading animation
+          $(".local-search-pop-overlay").remove();
+          $('body').css('overflow', '');
+
+          proceedsearch();
+        }
+      });
+    }
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+  
+    
+  
+  <link rel="stylesheet" href="">
+
+  
+  
+  <script src="/lib/needsharebutton/needsharebutton.js"></script>
+
+  <script>
+    
+      pbOptions = {};
+      
+          pbOptions.iconStyle = "default";
+      
+          pbOptions.boxForm = "horizontal";
+      
+          pbOptions.position = "bottomCenter";
+      
+          pbOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-postbottom', pbOptions);
+    
+    
+      flOptions = {};
+      
+          flOptions.iconStyle = "default";
+      
+          flOptions.boxForm = "vertical";
+      
+          flOptions.position = "topRight";
+      
+          flOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-float', flOptions);
+    
+  </script>
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

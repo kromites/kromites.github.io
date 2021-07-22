@@ -131,7 +131,7 @@
 <meta property="og:description" content="各类排序算法是一个很基础的算法概念，在面试当中，手撕排序算法也只算得上一道简单题。">
 <meta property="og:locale">
 <meta property="article:published_time" content="2021-07-01T12:27:11.000Z">
-<meta property="article:modified_time" content="2021-07-02T05:28:36.867Z">
+<meta property="article:modified_time" content="2021-07-22T04:53:36.676Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="排序">
 <meta name="twitter:card" content="summary">
@@ -518,7 +518,7 @@
 <p>​    3：重建大根堆—- 将前n-1个元素组成的无序序列调整为大根堆（递归）</p>
 <p>重复执行2和3 直到整个序列都有序</p>
 <p>C++内部实现： 优先队列</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapadjust</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> len, <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">auto</span> left = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line">	<span class="keyword">auto</span> right = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">auto</span> maxIdx = index;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (left &lt; len &amp;&amp; nums[left] &gt; nums[maxIdx]) maxIdx = left;</span><br><span class="line">	<span class="keyword">if</span> (right&lt; len &amp;&amp; nums[right] &gt; nums[maxIdx]) maxIdx = right;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span>(maxIdx != index) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[maxIdx], nums[index]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, len, maxIdx);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapsort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> size)</span> </span>&#123;</span><br><span class="line">	<span class="comment">// build a heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = size / <span class="number">2</span> <span class="number">-1</span>; i &gt;= <span class="number">0</span>; --i) &#123;</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, size, i);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// adjust the heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i=size<span class="number">-1</span>; i&gt;<span class="number">0</span>; i--) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[<span class="number">0</span>], nums[i]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, i, <span class="number">0</span>);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapadjust</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> len, <span class="keyword">int</span> index)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">auto</span> left = index * <span class="number">2</span> + <span class="number">1</span>;</span><br><span class="line">	<span class="keyword">auto</span> right = index * <span class="number">2</span> + <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">auto</span> maxIdx = index;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (left &lt; len &amp;&amp; nums[left] &gt; nums[maxIdx]) maxIdx = left;</span><br><span class="line">	<span class="keyword">if</span> (right&lt; len &amp;&amp; nums[right] &gt; nums[maxIdx]) maxIdx = right;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span>(maxIdx != index) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[maxIdx], nums[index]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, len, maxIdx);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">heapsort</span><span class="params">(vector&lt;<span class="keyword">int</span>&gt; &amp;nums, <span class="keyword">int</span> size)</span> </span>&#123;</span><br><span class="line">	<span class="comment">// build a heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i = size / <span class="number">2</span> <span class="number">-1</span>; i &gt;= <span class="number">0</span>; --i) &#123;</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, size, i);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// adjust the heap</span></span><br><span class="line">	<span class="keyword">for</span>(<span class="keyword">int</span> i=size<span class="number">-1</span>; i&gt;<span class="number">0</span>; i--) &#123;</span><br><span class="line">		<span class="built_in">swap</span>(nums[<span class="number">0</span>], nums[i]);</span><br><span class="line">		<span class="built_in">heapadjust</span>(nums, i, <span class="number">0</span>);</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 
 
@@ -678,7 +678,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">32</span>
+                  <span class="site-state-item-count">33</span>
                   <span class="site-state-item-name">日志</span>
                 </a>
               </div>
@@ -700,7 +700,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">52</span>
+                  <span class="site-state-item-count">56</span>
                   <span class="site-state-item-name">标签</span>
                 </a>
               </div>
@@ -740,6 +740,10 @@
                 
                 
                   <li class="recent_posts_li">
+                    <a href="/posts/25cc3a82/" title="Redis多机" target="_blank">Redis多机</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
                     <a href="/posts/5edc58a6/" title="Redis服务器" target="_blank">Redis服务器</a>
                   </li>
                 
@@ -753,10 +757,6 @@
                 
                   <li class="recent_posts_li">
                     <a href="/posts/5f64b03b/" title="RDB持久化" target="_blank">RDB持久化</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/eb52a7b2/" title="Redis数据库" target="_blank">Redis数据库</a>
                   </li>
                 
               </ul>
@@ -819,7 +819,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">94.2k</span>
+    <span title="Site words total count">96.2k</span>
   
 </div>
 <!--
