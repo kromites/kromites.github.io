@@ -112,7 +112,7 @@
 
 
 
-  <meta name="keywords" content="Redis," />
+  <meta name="keywords" content="Redis,事务," />
 
 
 
@@ -123,18 +123,21 @@
 
 
 
-<meta name="description" content="Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。">
+<meta name="description" content="本文简单介绍一下Redis事务，这一章节主要是过渡，学习Redis的事务之后就直接可以去看MySQL相关知识。">
 <meta property="og:type" content="article">
-<meta property="og:title" content="RedisSDS">
-<meta property="og:url" content="http://kromites.github.io/posts/ddef0534/index.html">
+<meta property="og:title" content="Redis事务">
+<meta property="og:url" content="http://kromites.github.io/posts/4d5e325c/index.html">
 <meta property="og:site_name" content="Kromite">
-<meta property="og:description" content="Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。">
+<meta property="og:description" content="本文简单介绍一下Redis事务，这一章节主要是过渡，学习Redis的事务之后就直接可以去看MySQL相关知识。">
 <meta property="og:locale">
-<meta property="article:published_time" content="2021-07-01T11:15:44.000Z">
-<meta property="article:modified_time" content="2021-07-02T05:30:25.342Z">
+<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%8E%9F%E5%AD%90%E6%80%A7.png">
+<meta property="article:published_time" content="2021-07-24T10:49:11.000Z">
+<meta property="article:modified_time" content="2021-07-24T13:53:05.059Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="Redis">
+<meta property="article:tag" content="事务">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://kromites.github.io/posts/undefined/%E5%8E%9F%E5%AD%90%E6%80%A7.png">
 
 
 
@@ -164,13 +167,13 @@
 
 
 
-  <link rel="canonical" href="http://kromites.github.io/posts/ddef0534/"/>
+  <link rel="canonical" href="http://kromites.github.io/posts/4d5e325c/"/>
 
 
 
 
 
-  <title>RedisSDS | Kromite</title>
+  <title>Redis事务 | Kromite</title>
   
 
 
@@ -341,7 +344,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/ddef0534/">
+    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/4d5e325c/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="name" content="">
@@ -358,7 +361,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">RedisSDS</h1>
+          <h1 class="post-title" itemprop="name headline">Redis事务</h1>
         
 
         <div class="post-meta">
@@ -371,8 +374,8 @@
               
                 <span class="post-meta-item-text">发表于</span>
               
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-01T19:15:44+08:00">
-                2021-07-01
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-24T18:49:11+08:00">
+                2021-07-24
               </time>
             
 
@@ -412,8 +415,8 @@
                 <span class="post-meta-item-icon">
                   <i class="fa fa-comment-o"></i>
                 </span>
-                <a href="/posts/ddef0534/#comments" itemprop="discussionUrl">
-                  <span class="post-comments-count valine-comment-count" data-xid="/posts/ddef0534/" itemprop="commentCount"></span>
+                <a href="/posts/4d5e325c/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/posts/4d5e325c/" itemprop="commentCount"></span>
                 </a>
               </span>
             
@@ -435,7 +438,7 @@
                   <span class="post-meta-item-text">字数统计&#58;</span>
                 
                 <span title="字数统计">
-                  1.4k
+                  1.9k
                 </span>
               
 
@@ -451,7 +454,7 @@
                   <span class="post-meta-item-text">阅读时长 &asymp;</span>
                 
                 <span title="阅读时长">
-                  5
+                  6
                 </span>
               
             </div>
@@ -473,99 +476,74 @@
 
       
         <blockquote>
-<p>Redis自己构建了一种名为简单动态字符串（SDS）的抽象类型，并将其设置为Redis默认字符串。</p>
+<p>本文简单介绍一下Redis事务，这一章节主要是过渡，学习Redis的事务之后就直接可以去看MySQL相关知识。</p>
 </blockquote>
 <span id="more"></span>
 
-<h3 id="1-SDS的定义"><a href="#1-SDS的定义" class="headerlink" title="1 SDS的定义"></a>1 SDS的定义</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sds.h&gt;</span></span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span>&#123;</span></span><br><span class="line">    <span class="comment">// 记录buf数组中已使用字节的数量</span></span><br><span class="line">    <span class="comment">// 等于SDS所保存的字符串长度</span></span><br><span class="line">    <span class="keyword">int</span> len;</span><br><span class="line">    <span class="comment">// 记录buf数组中未使用字节的数量</span></span><br><span class="line">    <span class="keyword">int</span> <span class="built_in">free</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 字节数组，用于保存字符串</span></span><br><span class="line">    <span class="keyword">char</span> buf[];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="事务的介绍"><a href="#事务的介绍" class="headerlink" title="事务的介绍"></a>事务的介绍</h4><p>​    <strong>Redis通过MULTI、EXEC、WATCH等命令来实现事务功能。</strong></p>
+<p>​    <strong>事务提供了一种将多个命令请求打包，然后一次性、按顺序地执行多个命令的机制。并且事务执行期间，服务器不会中断事务而改去执行其他客户端的命令请求，它会将事务中所有命令都执行完毕，然后才去处理其他客户端的命令请求</strong></p>
+<p>​    Redis的事务依旧有着ACID四大特性：原子性，一致性，隔离性，耐久性。</p>
+<p>​    总结来说，Redis事务就是一次性、顺序性、排他性的执行一个队列中的一系列命令。</p>
+<h4 id="事务的实现"><a href="#事务的实现" class="headerlink" title="事务的实现"></a>事务的实现</h4><p>​    一个事务从开始到结束通常经历三个阶段</p>
+<ul>
+<li>事务开始</li>
+<li>命令入队</li>
+<li>事务执行</li>
+</ul>
+<h5 id="事务开始"><a href="#事务开始" class="headerlink" title="事务开始"></a>事务开始</h5><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">redis&gt;</span><span class="bash"> MULTI</span></span><br><span class="line">OK</span><br></pre></td></tr></table></figure>
 
-<p><em>tag： 由于SDS遵循C字符串以空字符结尾的惯例， 保存空字符的1字节空间不计算在SDS的Len属性里面，并且为空字符自动生成一个字节空间</em></p>
-<h3 id="2-SDS和C字符串的区别"><a href="#2-SDS和C字符串的区别" class="headerlink" title="2 SDS和C字符串的区别"></a>2 SDS和C字符串的区别</h3><p>​    由于Redis对字符串在安全性，效率以及功能上都有需求， 因此SDS比传统字符串有着不少优化。</p>
+<p>​    MULTI命令可以将该命令的客户端从非事务状态切换至事务状态，这一切换是通过在客户端状态的flags属性中打开<code>REDIS_MULTI</code>标识来完成的，MULTI命令的实现可以用以下伪代码来表示</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">def MULTI():</span><br><span class="line"><span class="meta">	#</span><span class="bash"> 打开事务标识</span></span><br><span class="line">	client.flags |= REDIS_MULTI</span><br><span class="line"><span class="meta">	#</span><span class="bash"> 返回OK回复</span></span><br><span class="line">	replyOK()</span><br></pre></td></tr></table></figure>
+
+
+
+<h5 id="命令入队"><a href="#命令入队" class="headerlink" title="命令入队"></a>命令入队</h5><p>​    当一个客户端处于非事务状态时，这个客户端发送的命令会立即被服务器执行。</p>
+<p>与此不同的是，当一个客户端切换到事务状态之后，服务器会根据这个客户端发来的不同命令执行不同的操作：</p>
 <ul>
-<li><p><strong>常数复杂度获取字符串长度</strong></p>
-<p>C字符串获取长度靠<code>strlen</code>(O(n)), Redis是靠着<code>sds.len</code>直接获得。</p>
-</li>
-<li><p><strong>杜绝缓冲区的溢出</strong></p>
-<p>C字符串容易造成缓冲区的溢出，而SDS的空间分配策略完全杜绝了发生缓冲区溢出的可能性：当SDS的API需要对SDS进行修改时，API会先检查SDS的空间是否满足修改所需的要求。如果不满足，那么就会执行空间扩展工作。</p>
-</li>
-<li><p><strong>减少修改字符串时带来的内存重分配次数</strong></p>
+<li>客户端EXEC，DISCARD，WATCH，MULTI四个命令的其中一个，那个服务器立即执行这个命令。</li>
+<li>除上面的命令，服务器并不立即执行这个命令，而是将这个命令放入一个事务队列里面，然后向客户端返回QUEUED回复。</li>
+</ul>
+<h5 id="事务队列"><a href="#事务队列" class="headerlink" title="事务队列"></a>事务队列</h5><p>​    每个Redis客户端都有自己的事务状态，这个事务状态，这个事务状态保存在客户端状态的<code>mstate</code>属性里面：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">redisClient</span>&#123;</span></span><br><span class="line">	multiState mstate;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>​    事务状态包含一个事务队列，以及一个已入队命令的计数器（事务队列的长度）</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">multiState</span>&#123;</span></span><br><span class="line">    multiCmd *commands;</span><br><span class="line">    <span class="keyword">int</span> count;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>​    事务队列以先进先出的方式保存入队的命令，较先入队的命令会被放到数组的前面，而较后入队的命令则被放到数组的后面。</p>
+<h5 id="执行事务"><a href="#执行事务" class="headerlink" title="执行事务"></a>执行事务</h5><p>​    当一个处于事务状态的客户端向服务器发送EXEC命令时，这个EXEC命令将立即被服务器执行。服务器会遍历这个客户端的事务队列，执行队列中保存的所有命令，最后将执行命令所得的结果全部返回客户端。</p>
+<h4 id="WATCH命令的实现"><a href="#WATCH命令的实现" class="headerlink" title="WATCH命令的实现"></a>WATCH命令的实现</h4><p>​    watch命令是一个<strong>乐观锁</strong>，<strong>它可以在EXEC命令执行之前，监视任意数量的数据库键，并在EXEC命令执行时，检查被监视的键是否至少有一个已经被修改过了，如果是，那就拒绝执行该事务，并向客户端返回代表事务执行失败的空回复。</strong></p>
+<p>​    以下来介绍WATCH命令的实现原理，说明事务系统是如何监视某个键，并在键被修改的情况下，确保事务的安全性的。</p>
+<p>​    WATCH命令生成一个字典<code>watch_keys</code>，服务器能够清楚的知道哪些数据键正在被监视，以及哪些客户端正在监视这些数据库键。</p>
+<p>​    <strong>在执行修改键命令（如set，sadd，del等）之后，都会调用一个<code>touchWatchKey</code>函数对<code>watched_keys</code>字典进行检查，查看是否有客户端正在监视刚刚被命令修改过得数据库键，如果有的话，那么该函数会讲监视被修改键的客户端的<code>REDIS_DIRTY_CAS</code>标识打开，表示事务安全性被破坏</strong></p>
+<h4 id="事务的ACID性质"><a href="#事务的ACID性质" class="headerlink" title="事务的ACID性质"></a>事务的ACID性质</h4><p>​    在传统的关系式数据库中，常常用ACID性质来检验事务功能的可靠性和安全性。</p>
+<p>​    在Redis中，事务总是具有原子性、一致性和隔离性，并且当运行在某些特殊的模式下时，事务也具有耐久性。</p>
+<h5 id="原子性"><a href="#原子性" class="headerlink" title="原子性"></a>原子性</h5><p>​    事务具有原子性指的是，事务是由一系列操作执行，如果执行的话，要么不做，要么全部执行。</p>
+<p>​    但值得注意的是，Redis没有事务回滚功能，就算事务出错的话，也会一直执行下去。</p>
+<p>​    <img src="/posts/undefined/%E5%8E%9F%E5%AD%90%E6%80%A7.png" class title="原子性"></p>
+<p>​    <strong>总结来说：Redis中，单条命令是原子性执行的，但事务不保证原子性，且没有回滚。事务中任意命令执行失败，其余的命令仍会被执行。</strong></p>
+<p>​    这是因为Redis作者觉得如果命令出错应该是编程出错，在生产环境中一般不会出错，因此不设置回滚的话，能够让Redis更简单高效。</p>
+<h5 id="一致性"><a href="#一致性" class="headerlink" title="一致性"></a>一致性</h5><p>​    事务具有一致性指的是，如果数据库在执行事务之前是一致的，那么不管事务是否执行成功，数据库也应该仍然是一致的。</p>
+<p>​    <strong>Redis通过谨慎的错误检测和简单的设计来保证事务的一致性。</strong></p>
 <ul>
-<li><p>C字符串被增长或者缩短时，程序都要对该字符串进行一次内存重分配操作。</p>
+<li><p>入队错误</p>
+<p>入队命令出错，那么Redis拒绝执行该命令</p>
 </li>
-<li><p>针对未使用空间<code>sds.free</code>， SDS解除了字符串长度和底层数组长度之间的关联。从而实现了<strong>空间预分配和惰性空间释放</strong>两种优化策略。</p>
+<li><p>执行错误</p>
+<p>在事务执行的过程中，出错的命令会被服务器识别出来，并进行响应的错误处理，所以这些出错命令不会对数据库做任何修改，也不会对事务的一致性产生任何影响。</p>
+</li>
+<li><p>服务器停机</p>
+<p>由于有持久化，服务器停机也不会影响到事务的一致性。</p>
+</li>
+</ul>
+<h5 id="隔离性"><a href="#隔离性" class="headerlink" title="隔离性"></a>隔离性</h5><p>​    <strong>事务具有隔离性指的是，即使数据库中有多个事务并发地执行，各个事务之间也不会互相影响，并且在并发状态下执行的事务和串行执行的事务产生的结果相同。</strong></p>
+<p>​    <strong>Redis使用单线程来执行事务和命令，并且服务器保证，在执行事务期间不会对事务进行中断，因此，Redis的事务总是以串行的方式运行的，并且事务也总是具有隔离性的。</strong></p>
+<h5 id="耐久性"><a href="#耐久性" class="headerlink" title="耐久性"></a>耐久性</h5><p>​    <strong>事务的耐久性指的是，当一个事务执行完毕，该事务的结果已经被保存到永久性存储介质里面，即使服务器事务执行完毕之后停机，执行事务所得的结果也不回丢失。</strong></p>
+<p>​    Redis的事务不过是简单地用队列包裹起了一组Redis命令，Redis的持久性依旧需要靠其持久化模式</p>
 <ul>
-<li><p>空间预分配： 当API对一个SDS进行修改，并且需要对SDS进行空间扩展的时候，程序<strong>不仅会为SDS分配修改所必须要的空间，还会分配额外的未使用空间</strong>。</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 分配机制</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sdshdr</span> <span class="title">sds</span>;</span></span><br><span class="line"><span class="keyword">int</span> needlen;			<span class="comment">// sds字符串需要存储的字符串长度</span></span><br><span class="line"><span class="keyword">if</span>(sds.len &lt; <span class="number">1024</span>*<span class="number">1024</span>)	<span class="comment">// 1024*1024 = 1MB</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 分配空间至len</span></span><br><span class="line">    sds.len = needlen;</span><br><span class="line">    sds.<span class="built_in">free</span> = sds.len <span class="comment">// 保持一样</span></span><br><span class="line">    <span class="comment">//so strlen(sds.buf) = len + free + 1;</span></span><br><span class="line">&#125;<span class="keyword">else</span>&#123;</span><br><span class="line">    sds.len = needlen;</span><br><span class="line">    sds.<span class="built_in">free</span> = <span class="number">1024</span>*<span class="number">1024</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
-<li><p>惰性空间释放： 用于优化SDS的字符串缩短操作。 API需要缩短SDS保存的字符串时，程序并不立即使用内存重分配来回收缩短后多出来的字节，而是使用free属性将这些字节的数量纪录起来，并等待将来使用。</p>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-<li><p><strong>二进制安全</strong></p>
-<ul>
-<li><p>C字符串中的字符必须符合某种编码(如ASCII),并且<strong>除了字符串的末尾之外，字符串里面不能含有空字符</strong>（这个是因为程序读C字符串遇到空字符就默认这是字符串结尾）。 由于这些限制，<strong>C字符串只能保存文本数据，而不能保存像图片、音频、视频压缩文件这些二进制数据。</strong></p>
-</li>
-<li><p>SDS中的buf数组，既可以保存一系列字符，也可以保存一系列二进制数据。（其实可以理解为该数组可以保存空字符串，因为长度是已知的，程序不需要通过空字符串的位置判断这个字符串是否结束）</p>
-</li>
-</ul>
-</li>
-<li><p><strong>兼容部分C字符串函数</strong></p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="built_in">strcat</span>(s_string, sds-&gt;buf);</span><br><span class="line"><span class="comment">// 可以使用str相关的api</span></span><br></pre></td></tr></table></figure></li>
-<li><p><strong>总结</strong></p>
-<ul>
-<li>C字符串：<ul>
-<li>获取字符串长度的时间复杂度是O(N)</li>
-<li>API不安全，可能会造成缓冲区溢出</li>
-<li>修改字符串长度N次<strong>必然</strong>需要执行N次内存重分配</li>
-<li>只能保存文本数据</li>
-<li>可以使用<strong>所有</strong><code>&lt;string.h&gt;</code>的库函数</li>
-</ul>
-</li>
-<li>SDS：<ul>
-<li>获取字符串长度的时间复杂度是O(1)</li>
-<li>AP安全，不会造成缓冲区溢出</li>
-<li>修改字符串长度N次<strong>最多</strong>需要执行N次内存重分配</li>
-<li>能保存文本数据和二进制数据</li>
-<li>可以使用<strong>一部分</strong><code>&lt;string.h&gt;</code>的库函数</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-SDS-API"><a href="#3-SDS-API" class="headerlink" title="3 SDS API"></a>3 SDS API</h3><p>​    |       函数        |                                  作用                                     |                          时间复杂度</p>
-<ul>
-<li><p><code>sdsnew</code>           创建一个包含给定C字符串的SDS                          <code>O(N), N = strlen(str)</code></p>
-</li>
-<li><p><code>sdsempty</code>       创建一个不包含任何内容的空SDS                        <code>O(1)</code></p>
-</li>
-<li><p><code>sdsfree</code>         释放给定的SDS                                                       <code>O(N), N = strlen(str)</code></p>
-</li>
-<li><p><code>sdslen</code>           返回SDS已使用空间字节数                                    <code>O(1), get from sds-&gt;len</code></p>
-</li>
-<li><p><code>sdsavail </code>       返回SDS未使用空间字节数                                    <code>O(1), get from sds-&gt;free</code></p>
-</li>
-<li><p><code>sdsdup</code>           创建一个给定SDS的副本(copy)                             <code>O(N), N = strlen(str)</code></p>
-</li>
-<li><p><code>sdsclear</code>       清空SDS保存的字符串内容                                    <code>O(1), 惰性空间释放策略！</code>  -&gt; <strong>mark</strong></p>
-</li>
-<li><p><code>sdscat</code>           将给定C字符串拼接到SDS字符串的末尾               <code>O(N)，N = strlen(str) </code></p>
-</li>
-<li><p><code>sdscatsds</code>     将给定SDS字符串拼接到另一个SDS字符串末尾   <code>O(N)，N = strlen(str)</code></p>
-</li>
-<li><p><code>sdscpy</code>           <strong>将给定C字符串复制到SDS里面，</strong></p>
-<p>​                            <strong>覆盖SDS原有字符串</strong>                                              <code>O(N)，N = strlen(str)</code></p>
-</li>
-<li><p><code>sdsgrowzero</code>  用空字符将SDS扩展至给定长度                            <code>O(N),N为扩展新增的字节数</code></p>
-</li>
-<li><p><code>sdsrange</code>       保留SDS给定区间内的数据，</p>
-<p>​                        不在区间内的数据会被覆盖或清除                          <code>O(N),N为保留数据的字节数</code></p>
-</li>
-<li><p><code>sdstrim</code>         接收一个SDS和一个C字符串作为参数，                <code>O(N*M),M为SDS的长度，N为给定C字符串的长度</code></p>
-<p>​                        从SDS左右两端分别移除所有在C字符串中出现过的字符   </p>
-</li>
-<li><p><code>sdscmp</code>           比较两个SDS字符串是否相同                                 <code>O(N), N为两个SDS中较短的那个SDS的长度</code>                </p>
-</li>
+<li>如果无持久化，那么关机，该服务器所有数据都丢失</li>
+<li><strong>如果是RDB的话，那么BGSAVE生成的RDB文件不能保证数据第一时间能存储到硬盘中，所以RDB持久化下Redis是没有耐久性的。</strong></li>
+<li><strong>如果是AOF的话，当同步选项为always时，程序在执行命令之后调用同步函数，将命令数据保存在硬盘里，这种配置下的事务是具有耐久性的。</strong></li>
+<li>其它选项的AOF下（如no，everysec），都不具备耐久性。</li>
 </ul>
 
       
@@ -595,6 +573,8 @@
           
             <a href="/tags/Redis/" rel="tag"><i class="fa fa-tag"></i> Redis</a>
           
+            <a href="/tags/%E4%BA%8B%E5%8A%A1/" rel="tag"><i class="fa fa-tag"></i> 事务</a>
+          
         </div>
       
 
@@ -621,8 +601,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/posts/4a17b156/" rel="next" title="Hello World">
-                <i class="fa fa-chevron-left"></i> Hello World
+              <a href="/posts/25cc3a82/" rel="next" title="Redis多机">
+                <i class="fa fa-chevron-left"></i> Redis多机
               </a>
             
           </div>
@@ -631,8 +611,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/posts/735e5788/" rel="prev" title="排序算法">
-                排序算法 <i class="fa fa-chevron-right"></i>
+              <a href="/posts/f91535f/" rel="prev" title="MySQL事务">
+                MySQL事务 <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -824,7 +804,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-SDS%E7%9A%84%E5%AE%9A%E4%B9%89"><span class="nav-number">1.</span> <span class="nav-text">1 SDS的定义</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-SDS%E5%92%8CC%E5%AD%97%E7%AC%A6%E4%B8%B2%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">2.</span> <span class="nav-text">2 SDS和C字符串的区别</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-SDS-API"><span class="nav-number">3.</span> <span class="nav-text">3 SDS API</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BA%8B%E5%8A%A1%E7%9A%84%E4%BB%8B%E7%BB%8D"><span class="nav-number">1.</span> <span class="nav-text">事务的介绍</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BA%8B%E5%8A%A1%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">2.</span> <span class="nav-text">事务的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#%E4%BA%8B%E5%8A%A1%E5%BC%80%E5%A7%8B"><span class="nav-number">2.1.</span> <span class="nav-text">事务开始</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E5%91%BD%E4%BB%A4%E5%85%A5%E9%98%9F"><span class="nav-number">2.2.</span> <span class="nav-text">命令入队</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E4%BA%8B%E5%8A%A1%E9%98%9F%E5%88%97"><span class="nav-number">2.3.</span> <span class="nav-text">事务队列</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E6%89%A7%E8%A1%8C%E4%BA%8B%E5%8A%A1"><span class="nav-number">2.4.</span> <span class="nav-text">执行事务</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#WATCH%E5%91%BD%E4%BB%A4%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">3.</span> <span class="nav-text">WATCH命令的实现</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%BA%8B%E5%8A%A1%E7%9A%84ACID%E6%80%A7%E8%B4%A8"><span class="nav-number">4.</span> <span class="nav-text">事务的ACID性质</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#%E5%8E%9F%E5%AD%90%E6%80%A7"><span class="nav-number">4.1.</span> <span class="nav-text">原子性</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E4%B8%80%E8%87%B4%E6%80%A7"><span class="nav-number">4.2.</span> <span class="nav-text">一致性</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E9%9A%94%E7%A6%BB%E6%80%A7"><span class="nav-number">4.3.</span> <span class="nav-text">隔离性</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E8%80%90%E4%B9%85%E6%80%A7"><span class="nav-number">4.4.</span> <span class="nav-text">耐久性</span></a></li></ol></li></ol></div>
             
 
           </div>

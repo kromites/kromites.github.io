@@ -28,6 +28,93 @@
       </tags>
   </entry>
   <entry>
+    <title>MySQL事务</title>
+    <url>/posts/f91535f/</url>
+    <content><![CDATA[]]></content>
+  </entry>
+  <entry>
+    <title>Redis事务</title>
+    <url>/posts/4d5e325c/</url>
+    <content><![CDATA[<blockquote>
+<p>本文简单介绍一下Redis事务，这一章节主要是过渡，学习Redis的事务之后就直接可以去看MySQL相关知识。</p>
+</blockquote>
+<span id="more"></span>
+
+<h4 id="事务的介绍"><a href="#事务的介绍" class="headerlink" title="事务的介绍"></a>事务的介绍</h4><p>​    <strong>Redis通过MULTI、EXEC、WATCH等命令来实现事务功能。</strong></p>
+<p>​    <strong>事务提供了一种将多个命令请求打包，然后一次性、按顺序地执行多个命令的机制。并且事务执行期间，服务器不会中断事务而改去执行其他客户端的命令请求，它会将事务中所有命令都执行完毕，然后才去处理其他客户端的命令请求</strong></p>
+<p>​    Redis的事务依旧有着ACID四大特性：原子性，一致性，隔离性，耐久性。</p>
+<p>​    总结来说，Redis事务就是一次性、顺序性、排他性的执行一个队列中的一系列命令。</p>
+<h4 id="事务的实现"><a href="#事务的实现" class="headerlink" title="事务的实现"></a>事务的实现</h4><p>​    一个事务从开始到结束通常经历三个阶段</p>
+<ul>
+<li>事务开始</li>
+<li>命令入队</li>
+<li>事务执行</li>
+</ul>
+<h5 id="事务开始"><a href="#事务开始" class="headerlink" title="事务开始"></a>事务开始</h5><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line"><span class="meta">redis&gt;</span><span class="bash"> MULTI</span></span><br><span class="line">OK</span><br></pre></td></tr></table></figure>
+
+<p>​    MULTI命令可以将该命令的客户端从非事务状态切换至事务状态，这一切换是通过在客户端状态的flags属性中打开<code>REDIS_MULTI</code>标识来完成的，MULTI命令的实现可以用以下伪代码来表示</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">def MULTI():</span><br><span class="line"><span class="meta">	#</span><span class="bash"> 打开事务标识</span></span><br><span class="line">	client.flags |= REDIS_MULTI</span><br><span class="line"><span class="meta">	#</span><span class="bash"> 返回OK回复</span></span><br><span class="line">	replyOK()</span><br></pre></td></tr></table></figure>
+
+
+
+<h5 id="命令入队"><a href="#命令入队" class="headerlink" title="命令入队"></a>命令入队</h5><p>​    当一个客户端处于非事务状态时，这个客户端发送的命令会立即被服务器执行。</p>
+<p>与此不同的是，当一个客户端切换到事务状态之后，服务器会根据这个客户端发来的不同命令执行不同的操作：</p>
+<ul>
+<li>客户端EXEC，DISCARD，WATCH，MULTI四个命令的其中一个，那个服务器立即执行这个命令。</li>
+<li>除上面的命令，服务器并不立即执行这个命令，而是将这个命令放入一个事务队列里面，然后向客户端返回QUEUED回复。</li>
+</ul>
+<h5 id="事务队列"><a href="#事务队列" class="headerlink" title="事务队列"></a>事务队列</h5><p>​    每个Redis客户端都有自己的事务状态，这个事务状态，这个事务状态保存在客户端状态的<code>mstate</code>属性里面：</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">redisClient</span>&#123;</span></span><br><span class="line">	multiState mstate;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>​    事务状态包含一个事务队列，以及一个已入队命令的计数器（事务队列的长度）</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">multiState</span>&#123;</span></span><br><span class="line">    multiCmd *commands;</span><br><span class="line">    <span class="keyword">int</span> count;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>​    事务队列以先进先出的方式保存入队的命令，较先入队的命令会被放到数组的前面，而较后入队的命令则被放到数组的后面。</p>
+<h5 id="执行事务"><a href="#执行事务" class="headerlink" title="执行事务"></a>执行事务</h5><p>​    当一个处于事务状态的客户端向服务器发送EXEC命令时，这个EXEC命令将立即被服务器执行。服务器会遍历这个客户端的事务队列，执行队列中保存的所有命令，最后将执行命令所得的结果全部返回客户端。</p>
+<h4 id="WATCH命令的实现"><a href="#WATCH命令的实现" class="headerlink" title="WATCH命令的实现"></a>WATCH命令的实现</h4><p>​    watch命令是一个<strong>乐观锁</strong>，<strong>它可以在EXEC命令执行之前，监视任意数量的数据库键，并在EXEC命令执行时，检查被监视的键是否至少有一个已经被修改过了，如果是，那就拒绝执行该事务，并向客户端返回代表事务执行失败的空回复。</strong></p>
+<p>​    以下来介绍WATCH命令的实现原理，说明事务系统是如何监视某个键，并在键被修改的情况下，确保事务的安全性的。</p>
+<p>​    WATCH命令生成一个字典<code>watch_keys</code>，服务器能够清楚的知道哪些数据键正在被监视，以及哪些客户端正在监视这些数据库键。</p>
+<p>​    <strong>在执行修改键命令（如set，sadd，del等）之后，都会调用一个<code>touchWatchKey</code>函数对<code>watched_keys</code>字典进行检查，查看是否有客户端正在监视刚刚被命令修改过得数据库键，如果有的话，那么该函数会讲监视被修改键的客户端的<code>REDIS_DIRTY_CAS</code>标识打开，表示事务安全性被破坏</strong></p>
+<h4 id="事务的ACID性质"><a href="#事务的ACID性质" class="headerlink" title="事务的ACID性质"></a>事务的ACID性质</h4><p>​    在传统的关系式数据库中，常常用ACID性质来检验事务功能的可靠性和安全性。</p>
+<p>​    在Redis中，事务总是具有原子性、一致性和隔离性，并且当运行在某些特殊的模式下时，事务也具有耐久性。</p>
+<h5 id="原子性"><a href="#原子性" class="headerlink" title="原子性"></a>原子性</h5><p>​    事务具有原子性指的是，事务是由一系列操作执行，如果执行的话，要么不做，要么全部执行。</p>
+<p>​    但值得注意的是，Redis没有事务回滚功能，就算事务出错的话，也会一直执行下去。</p>
+<p>​    <img src="/posts/undefined/%E5%8E%9F%E5%AD%90%E6%80%A7.png" class title="原子性"></p>
+<p>​    <strong>总结来说：Redis中，单条命令是原子性执行的，但事务不保证原子性，且没有回滚。事务中任意命令执行失败，其余的命令仍会被执行。</strong></p>
+<p>​    这是因为Redis作者觉得如果命令出错应该是编程出错，在生产环境中一般不会出错，因此不设置回滚的话，能够让Redis更简单高效。</p>
+<h5 id="一致性"><a href="#一致性" class="headerlink" title="一致性"></a>一致性</h5><p>​    事务具有一致性指的是，如果数据库在执行事务之前是一致的，那么不管事务是否执行成功，数据库也应该仍然是一致的。</p>
+<p>​    <strong>Redis通过谨慎的错误检测和简单的设计来保证事务的一致性。</strong></p>
+<ul>
+<li><p>入队错误</p>
+<p>入队命令出错，那么Redis拒绝执行该命令</p>
+</li>
+<li><p>执行错误</p>
+<p>在事务执行的过程中，出错的命令会被服务器识别出来，并进行响应的错误处理，所以这些出错命令不会对数据库做任何修改，也不会对事务的一致性产生任何影响。</p>
+</li>
+<li><p>服务器停机</p>
+<p>由于有持久化，服务器停机也不会影响到事务的一致性。</p>
+</li>
+</ul>
+<h5 id="隔离性"><a href="#隔离性" class="headerlink" title="隔离性"></a>隔离性</h5><p>​    <strong>事务具有隔离性指的是，即使数据库中有多个事务并发地执行，各个事务之间也不会互相影响，并且在并发状态下执行的事务和串行执行的事务产生的结果相同。</strong></p>
+<p>​    <strong>Redis使用单线程来执行事务和命令，并且服务器保证，在执行事务期间不会对事务进行中断，因此，Redis的事务总是以串行的方式运行的，并且事务也总是具有隔离性的。</strong></p>
+<h5 id="耐久性"><a href="#耐久性" class="headerlink" title="耐久性"></a>耐久性</h5><p>​    <strong>事务的耐久性指的是，当一个事务执行完毕，该事务的结果已经被保存到永久性存储介质里面，即使服务器事务执行完毕之后停机，执行事务所得的结果也不回丢失。</strong></p>
+<p>​    Redis的事务不过是简单地用队列包裹起了一组Redis命令，Redis的持久性依旧需要靠其持久化模式</p>
+<ul>
+<li>如果无持久化，那么关机，该服务器所有数据都丢失</li>
+<li><strong>如果是RDB的话，那么BGSAVE生成的RDB文件不能保证数据第一时间能存储到硬盘中，所以RDB持久化下Redis是没有耐久性的。</strong></li>
+<li><strong>如果是AOF的话，当同步选项为always时，程序在执行命令之后调用同步函数，将命令数据保存在硬盘里，这种配置下的事务是具有耐久性的。</strong></li>
+<li>其它选项的AOF下（如no，everysec），都不具备耐久性。</li>
+</ul>
+]]></content>
+      <categories>
+        <category>Redis</category>
+      </categories>
+      <tags>
+        <tag>Redis</tag>
+        <tag>事务</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Redis多机</title>
     <url>/posts/25cc3a82/</url>
     <content><![CDATA[<blockquote>
