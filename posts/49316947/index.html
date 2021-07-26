@@ -130,17 +130,18 @@
 <meta property="og:site_name" content="Kromite">
 <meta property="og:description" content="在LINUX&#x2F;UNIX下，有五种I&#x2F;O操作方式：阻塞式I&#x2F;O，非阻塞I&#x2F;O，I&#x2F;O多路复用，信号驱动式I&#x2F;O，异步I&#x2F;O。本文现在就开始对这五种模式进行简单的介绍。">
 <meta property="og:locale">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E9%9D%9E%E9%98%BB%E5%A1%9E%E6%A8%A1%E5%9E%8B.jpg">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E6%A8%A1%E5%9E%8B.jpg">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E4%BF%A1%E5%8F%B7%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9E%8B.jpg">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%BC%82%E6%AD%A5%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:image" content="http://kromites.github.io/posts/49316947/%E9%98%BB%E5%A1%9E%E5%BC%8F%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:image" content="http://kromites.github.io/posts/49316947/%E9%9D%9E%E9%98%BB%E5%A1%9E%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:image" content="http://kromites.github.io/posts/49316947/%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:image" content="http://kromites.github.io/posts/49316947/%E4%BF%A1%E5%8F%B7%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:image" content="http://kromites.github.io/posts/49316947/%E5%BC%82%E6%AD%A5%E6%A8%A1%E5%9E%8B.jpg">
 <meta property="article:published_time" content="2021-07-25T12:40:59.000Z">
-<meta property="article:modified_time" content="2021-07-25T14:27:03.145Z">
+<meta property="article:modified_time" content="2021-07-26T07:18:14.409Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="网络编程">
 <meta property="article:tag" content="I&#x2F;O模型">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="http://kromites.github.io/posts/undefined/%E9%9D%9E%E9%98%BB%E5%A1%9E%E6%A8%A1%E5%9E%8B.jpg">
+<meta name="twitter:image" content="http://kromites.github.io/posts/49316947/%E9%98%BB%E5%A1%9E%E5%BC%8F%E6%A8%A1%E5%9E%8B.jpg">
 
 
 
@@ -485,7 +486,7 @@
 
 <h3 id="阻塞式I-O"><a href="#阻塞式I-O" class="headerlink" title="阻塞式I/O"></a>阻塞式I/O</h3><p>​    阻塞式I/O模型是最普遍使用的I/O 模式。大部分程序使用的都是阻塞模式的I/O 。<strong>在默认情况下，所有套接字都是阻塞的。</strong></p>
 <p>​    以UDP套接字为例，如果使用<code>recvfrom</code>系统调用去接收对方的数据报，会发生如图以下的情况。</p>
-
+<img src="/posts/49316947/%E9%98%BB%E5%A1%9E%E5%BC%8F%E6%A8%A1%E5%9E%8B.jpg" class title="阻塞I&#x2F;O模型">
 
 <ul>
 <li>在调用<code>recvfrom</code>函数的时候，该进程（线程）会阻塞。</li>
@@ -495,21 +496,21 @@
 </ul>
 <p>因此可以知道，<strong>阻塞I/O模型下，<code>recvfrom</code>系统调用直到数据报到达且被复制到应用进程的缓冲区中或者发生错误才返回。</strong>换句话说，该进程在调用<code>recvfrom</code>开始到它返回的整个时间内都是被阻塞的。</p>
 <h3 id="非阻塞是I-O"><a href="#非阻塞是I-O" class="headerlink" title="非阻塞是I/O"></a>非阻塞是I/O</h3><p>​    进程把一个套接字设置成非阻塞是在通知内核：<strong>当所请求的I/O操作非得把本进程置于休眠（阻塞）状态才能完成时，进程不会进入休眠状态，而会直接返回一个错误。</strong>     </p>
-<p>​    <img src="/posts/undefined/%E9%9D%9E%E9%98%BB%E5%A1%9E%E6%A8%A1%E5%9E%8B.jpg" class title="非阻塞式I&#x2F;O"></p>
+<p>​    <img src="/posts/49316947/%E9%9D%9E%E9%98%BB%E5%A1%9E%E6%A8%A1%E5%9E%8B.jpg" class title="非阻塞式I&#x2F;O"></p>
 <p>​    前三次调用<code>recvfrom</code>时没有数据可返回，因此内核转而立即返回一个<code>EWOULDBLOCK（期望阻塞）</code>或者是<code>EAGAIN（再来一次）</code>错误。第四次调用<code>recvfrom</code>时已有一个数据报准备好，它被复制到应用进程缓冲区，于是<code>recvfrom</code>成功返回。</p>
 <p>​    当一个应用进程像这样对一个非阻塞描述符循环调用<code>recvfrom</code>时，我们称之为轮询。应用进程持续轮询内核，以查看某个操作是否就绪。这么做往往耗费大量CPU时间。</p>
 <p><strong>一个I/O操作是否是非阻塞的，取决于该I/O操作处理的套接字是否设置为非阻塞的。</strong></p>
 <h3 id="I-O多路复用"><a href="#I-O多路复用" class="headerlink" title="I/O多路复用"></a>I/O多路复用</h3><p>​    <strong>I/O多路复用是使用select，poll或者是epoll等I/O复用函数来进行通知I/O操作是否到来</strong>。I/O复用是最常使用I/O通知机制。它指的是，应用进程通过I/O复用函数向内核注册一组事件，内核通过I/O复用函数把其中就绪的时间通知给应用进程。</p>
 <p>​    值得注意的是，I/O复用函数本身是阻塞的，它们能提高程序效率的原因在于它们具有同时监听多个I/O事件的能力。</p>
 <p>​    如下图所示</p>
-<img src="/posts/undefined/%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E6%A8%A1%E5%9E%8B.jpg" class title="I&#x2F;O多路复用模型">
+<img src="/posts/49316947/%E5%A4%9A%E8%B7%AF%E5%A4%8D%E7%94%A8%E6%A8%A1%E5%9E%8B.jpg" class title="I&#x2F;O多路复用模型">
 
 <p>​    有了I/O复用技术，进程就不再是阻塞在真正的I/O系统调用（如<code>recvfrom</code>）上，而是阻塞在I/O复用函数上（如select, poll, epoll_wait)。进程阻塞这三个调用上，等待数据报套接字变为可读。当select返回套接字可读这一条件，我们调用<code>recvfrom</code>把所读数据报复制到应用进程缓冲区中。</p>
 <p>​    </p>
 <p>​    <strong>I/O多路复用的优势在于多路，</strong>如果是单线程中的<code>recvfrom</code>和<code>select</code>，那确实没有优势，毕竟使用了两个系统调用，效率更低。但是如果是在多线程的条件下，那I/O多路复用的优势就体现出来了——可以在一个线程中使用select，然后再其他线程中都能够自由的调用<code>recvfrom</code>之类的阻塞式I/O。</p>
 <h3 id="信号驱动式I-O"><a href="#信号驱动式I-O" class="headerlink" title="信号驱动式I/O"></a>信号驱动式I/O</h3><p>​    我们也可以用信号，让内核在描述符就绪时发送SIGIO信号通知我们。使用信号通知的方式叫做信号驱动式I/O。一般来说这种方法需要在用户进程中通过sigaction调用安装信号处理函数。<strong>当数据报准备好读取时，内核就为该进程产生一个SIGIO信号</strong>。我们随后既可以在信号处理函数中调用recvfrom读取数据报，并通知主循环数据已准备好待处理，也可以立即通知主循环，让它读取数据报。</p>
 <p>​    如下图所示</p>
-<img src="/posts/undefined/%E4%BF%A1%E5%8F%B7%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9E%8B.jpg" class title="信号驱动I&#x2F;O模型">
+<img src="/posts/49316947/%E4%BF%A1%E5%8F%B7%E9%A9%B1%E5%8A%A8%E6%A8%A1%E5%9E%8B.jpg" class title="信号驱动I&#x2F;O模型">
 
 <p>​    无论如何处理SIGIO信号，这种模型的优势在于<strong>等待数据报到达期间进程不被阻塞</strong>。主循环可以继续执行，只要等待来自信号处理函数的通知。</p>
 <p>​    最后，理论上来讲，以上四种I/O模型都是同步I/O。<strong>同步I/O指的是读写操作，都是在I/O事件发生之后，由应用进程来完成。</strong>因此<strong>同步I/O要求应用进程自行执行I/O操作（将数据从内核缓冲区读入用户缓冲区，后者将数据从用户缓冲区写入内核缓冲区），这样的话内核向应用程序通知的是I/O就绪事件（内核缓冲区中有数据）</strong></p>
@@ -519,7 +520,7 @@
 <p>​    <strong>（异步I/O的读写操作很像是一种注册行为，根本不需要等，只需要向内核注册了读写操作，内核接管该操作等待事件到来之后，直接进行读写操作）</strong></p>
 <p>​    综上异步I/O向应用进程通知的是I/O完成事件。</p>
 <p>​    下图为例</p>
-<img src="/posts/undefined/%E5%BC%82%E6%AD%A5%E6%A8%A1%E5%9E%8B.jpg" class title="异步I&#x2F;O模型">
+<img src="/posts/49316947/%E5%BC%82%E6%AD%A5%E6%A8%A1%E5%9E%8B.jpg" class title="异步I&#x2F;O模型">
 
 <p>​    我们调用<code>aio_read</code>函数，给内核传递描述符、缓冲区指针、缓冲区大小（与read相同的三个参数）和<strong>文件偏移（与lseek类似），并告诉内核整个操作完成时如何通知我们。</strong></p>
 <h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><table>
