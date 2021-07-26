@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic|Robota Slab:300,300italic,400,400italic,700,700italic|Lobster Two:300,300italic,400,400italic,700,700italic|PT Mono:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css" />
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="MySQL,索引," />
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="索引（在MySQL中也叫作键（key））是存储引擎用于快速找到记录的一种数据结构。这是索引的基本功能，除此之外，索引其他一些方面有用的属性也会在本篇文章中讲到。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MySQL索引">
+<meta property="og:url" content="http://kromites.github.io/posts/43a71ae4/index.html">
+<meta property="og:site_name" content="Kromite">
+<meta property="og:description" content="索引（在MySQL中也叫作键（key））是存储引擎用于快速找到记录的一种数据结构。这是索引的基本功能，除此之外，索引其他一些方面有用的属性也会在本篇文章中讲到。">
+<meta property="og:locale">
+<meta property="og:image" content="http://kromites.github.io/posts/43a71ae4/Users/16258/Desktop/hexo/source_posts/MySQL索引/B树介绍.png">
+<meta property="og:image" content="http://kromites.github.io/posts/undefined/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png">
+<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png">
+<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png">
+<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%8C%BA%E5%88%AB.png">
+<meta property="article:published_time" content="2021-07-26T07:21:00.000Z">
+<meta property="article:modified_time" content="2021-07-26T13:39:41.135Z">
+<meta property="article:author" content="Kromite">
+<meta property="article:tag" content="MySQL">
+<meta property="article:tag" content="索引">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://kromites.github.io/posts/43a71ae4/Users/16258/Desktop/hexo/source_posts/MySQL索引/B树介绍.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '',
+    scheme: 'Mist',
+    version: '5.1.4',
+    sidebar: {"position":"right","display":"post","offset":12,"b2t":false,"scrollpercent":true,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://kromites.github.io/posts/43a71ae4/"/>
+
+
+
+
+
+  <title>MySQL索引 | Kromite</title>
+  
+
+
+
+
+
+
+
+
+<meta name="generator" content="Hexo 5.4.0"></head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-right page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Kromite</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Record bit by bit</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocomplete="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/43a71ae4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Kromite">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">MySQL索引</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+          
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-26T15:21:00+08:00">
+                2021-07-26
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/MySQL/" itemprop="url" rel="index">
+                    <span itemprop="name">MySQL</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/posts/43a71ae4/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/posts/43a71ae4/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+            <div class="post-wordcount">
+              
+                
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-file-word-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">字数统计&#58;</span>
+                
+                <span title="字数统计">
+                  4k
+                </span>
+              
+
+              
+                <span class="post-meta-divider">|</span>
+              
+
+              
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-clock-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">阅读时长 &asymp;</span>
+                
+                <span title="阅读时长">
+                  13
+                </span>
+              
+            </div>
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <blockquote>
+<p>索引（在MySQL中也叫作键（key））是存储引擎用于快速找到记录的一种数据结构。这是索引的基本功能，除此之外，索引其他一些方面有用的属性也会在本篇文章中讲到。</p>
+</blockquote>
+<span id="more"></span>
+
+<p>​    索引是良好的的性能非常关键，尤其是当表中的数据量越来越大时，索引对性能的影响愈发重要。一个合适的索引设计一般对于大量数据查询时，会有极大的性能提升。</p>
+<p>​    索引优化应该是对查询性能优化最有效的手段。索引能够轻易将查询性能提高几个数量级，创建一个好的索引一般也要重写查询语句。因此本章和下一章的查询优化关系非常紧密。</p>
+<p>​    <strong>索引的本质是一种数据结构</strong></p>
+<h3 id="索引基础"><a href="#索引基础" class="headerlink" title="索引基础"></a>索引基础</h3><p>​    索引的工作方式和书的目录有点像，都是先在索引部分找到对应值，然后根据匹配的索引记录找到对应的数据行。</p>
+<p>​    换句话说，<strong>MySQL先在索引上按值进行查找，然后返回所有包含该值的数据行</strong>。</p>
+<p>​    索引可以包含一个或多个列的值。如果索引包含多个列，那么列的顺序也十分重要。</p>
+<p>​    索引有多种类型，可以为不同的场景提供更好的性能。在MySQL中，索引是在引擎层而不是服务器层实现的，因此索引和存储引擎有关，不同存储引擎的索引工作方式不同。</p>
+<p>下面就来介绍一下MySQL支持的索引类型，以及它们的优缺点。</p>
+<h4 id="B-Tree索引"><a href="#B-Tree索引" class="headerlink" title="B-Tree索引"></a>B-Tree索引</h4><p>​    这个是索引的主要类型。底层为B+树数据结构。</p>
+<h5 id="B-树结构"><a href="#B-树结构" class="headerlink" title="B+树结构"></a><strong>B+树结构</strong></h5><p>​    首先我们来简单介绍下B+树</p>
+<p><img src="/posts/43a71ae4/Users\16258\Desktop\hexo\source_posts\MySQL索引\B树介绍.png" alt="image-20210726163709331"></p>
+<img src="/posts/undefined/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png" class title="B+树介绍">
+
+<p>​    不过B+树的插入和删除操作会导致其结构发生变化，但是永远会保持平衡，而且根节点到叶子节点的距离永远相同。<strong>这样为了保持平衡对于新插入的键值可能需要做大量的拆分页操作</strong>。因为B+树结构主要用于磁盘，页的拆分意味着磁盘的操作，所以应该在可能的情况下减少页的拆分，因此B+树也有类似于AVL树的旋转操作，以减少页拆分的次数。</p>
+<p><strong>从上可以看出B+树存储的所有的值都是按顺序存储的，并且每一个叶子页到根的距离相同。</strong></p>
+<p>B+树索引的本质就是B+树在数据库中的实现。一般数据库中的实现的B树都是2<del>4层，这样一来具有<strong>高扇出性</strong>，查找某一键值的行记录最多只需要2</del>4次。对于一般机械键盘也只需0.02~0.04s。</p>
+<h5 id="聚簇索引和非聚簇索引"><a href="#聚簇索引和非聚簇索引" class="headerlink" title="聚簇索引和非聚簇索引"></a><strong>聚簇索引和非聚簇索引</strong></h5><p>​    B+树索引可以分为<strong>聚簇索引和非聚簇索引</strong>，不管是聚集索引还是辅助索引，内部都是B+树，即高度平衡的，叶子节点存放所有的数据。但是二者有着以下的差别</p>
+<p>​    B+树是左小右大的顺序存储结构，节点只包含id索引列，而叶子节点包含索引列和数据，<strong>这种数据和索引在一起存储的索引方式叫做聚簇索引</strong>，<strong>一张表只能有一个聚簇索引。假设没有定义主键，InnoDB会选择一个唯一的非空索引代替，如果没有的话则会隐式定义一个主键作为聚簇索引</strong>。</p>
+<p>​    <img src="/posts/undefined/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="聚簇索引"></p>
+<p>​    上图主键聚簇索引存储的结构，那么非聚簇索引的结构是什么样子呢？<strong>非聚簇索引(二级索引)叶子节点保存的不是数据，而是主键id值</strong>，这一点和myisam保存的是数据地址是不同的。 <strong>非聚簇索引通过先查询到该数据的主键id值后，再通过主键id值去查找该表中唯一的聚簇索引，通过聚簇索引得到真正的数据</strong>，这个也是被称作二级索引的原因， 因为它查完还得查聚簇。</p>
+<p>​    <img src="/posts/undefined/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="非聚簇索引"></p>
+<p>​    最终，我们一张图可以看看InnoDB和Myisam聚簇和非聚簇索引的区别</p>
+<p>​    <img src="/posts/undefined/%E5%8C%BA%E5%88%AB.png" class title="区别"></p>
+<p>​    <strong>上图可以看出InnoDB的叶子扇区存放的整行数据，而MyISAM存放的是指向行数据的指针。</strong></p>
+<h5 id="二者的优缺点"><a href="#二者的优缺点" class="headerlink" title="二者的优缺点"></a><strong>二者的优缺点</strong></h5><p>​    <strong>聚簇索引的优点在于对于使用主键的排序查找和范围查找速度非常快，因为叶子节点的数据就是用户徐亚查询所要的数据。</strong></p>
+<p>​    范围查找是因为可以通过叶子节点的上层中间节点得到页的范围，之后直接读取数据页即可。</p>
+<p>​    非聚簇索引的优点是可以有多个，并不影响数据在聚集索引上中的组织，只是一个辅助手段。</p>
+<h5 id="B-树索引的特点"><a href="#B-树索引的特点" class="headerlink" title="B+树索引的特点"></a>B+树索引的特点</h5><p>​    B-Tree索引能够加快访问数据的速度，因为存储引擎不再需要进行全表扫描来获取数据，而是从<strong>索引的根节点开始搜索</strong>。由于索引列是按顺序存储的，所以很适合<strong>查找范围数据</strong>。</p>
+<p>​    因此B-Tree索引适用于<strong>全键值，键值范围或键前缀查找</strong>。键前缀查找只适用于根据最左前缀的查找。</p>
+<ul>
+<li><p><strong>全键值指的是一整行数据。B树索引能够查找一整行存储的数据。</strong></p>
+</li>
+<li><p><strong>其键值范围或键前缀查找都是因为B树是从索引的第一列开始查询</strong>（假设索引有ABC三列，只能这样使用索引：部分A当做索引，或者全部A，全部A部分B，全部A全部B，全部A全部B部分C，全部A全部B全部C）</p>
+<p>这种模式的索引是典型的最左值前缀查找</p>
+</li>
+</ul>
+<p>总而言之B+树索引的优点</p>
+<ul>
+<li>顺序存储</li>
+<li>访问的次数是从根节点到叶节点，而B+树一般只有2~4层，因此查询的时间短且固定。</li>
+<li>支持全键值，剑指范围或键前缀查找</li>
+</ul>
+<h4 id="哈希索引"><a href="#哈希索引" class="headerlink" title="哈希索引"></a>哈希索引</h4><p>​    哈希索引是基于<strong>哈希表</strong>来实现的（这个和hashmap类似，索引就是hashmap的key），<strong>只有精确匹配索引所有列的查询才有效。</strong>对于每一行数据，存储引擎都会对所有的索引列计算出一个哈希码(hash code)，哈希码是一个较小的值，并且不同剑指的行计算出来的哈希码都不一样。</p>
+<p>​    <strong>哈希索引将所有的哈希码存储在索引中，同时哈希表中保存指向每个数据行的指针。</strong></p>
+<p>​    哈希索引只有Memory引擎显式支持。这也是该引擎的默认索引类型。</p>
+<p>哈希索引优点：</p>
+<ul>
+<li>索引自身只需要存储对应的哈希值，所以索引结构非常紧凑</li>
+<li>通过hash查找，哈希索引的速度非常快</li>
+</ul>
+<p>哈希索引缺点：</p>
+<ul>
+<li><p>索引内只包含哈希值和行指针，不存储字段，不能通过索引中的值来避免读取行。</p>
+</li>
+<li><p>哈希索引数据并不是按照索引值顺序存储的，所以也就<strong>无法用于排序</strong>。</p>
+</li>
+<li><p>哈希索引不支持部分<strong>范围索引</strong>，这是因为一个完整的哈希索引才对应一个哈希码。</p>
+</li>
+<li><p>只支持等值查询，因为哈希是命中的（true or false），<strong>不支持范围查询</strong>。</p>
+</li>
+<li><p>由于本质是哈希算法，所以会造成哈希冲突，如果造成哈希冲突会使查询效率降低。</p>
+</li>
+<li><p>如果哈希冲突很多，那么索引的维护操作也很高。</p>
+</li>
+</ul>
+<p>哈希索引的优点和缺点都是因为其基于哈希算法而实现的。因此其适用性场景可能会不够多，但是在它使用的领域效率还是非常可观的。</p>
+<h3 id="索引的优点"><a href="#索引的优点" class="headerlink" title="索引的优点"></a>索引的优点</h3><ul>
+<li><strong>索引能够让服务器快速定位到表的指定位置（基本优点）</strong></li>
+</ul>
+<p>总结下就是三大优点</p>
+<ul>
+<li><strong>索引大大减少了服务器需要扫描的数据量</strong></li>
+<li><strong>索引可以帮助服务器避免排序和临时表</strong></li>
+<li><strong>索引可以将随机I/O变为顺序I/O</strong></li>
+</ul>
+<p>后两条其实是B+树索引的优点。</p>
+<p>不过值得注意的是，索引的本质也是为了优化查询效率，只有该索引帮助存储引擎快速查找到记录带来的好处大于其带来的额外工作时，索引才是有效的。</p>
+<ul>
+<li>表如果是很小的话，那么全表扫描应该会更好</li>
+<li>表如果是中到大型的话，那么索引会非常</li>
+<li>表如果非常大的话，那么索引的代价就很大了，这个时候可以考虑分表。</li>
+</ul>
+<h3 id="高性能索引的策略"><a href="#高性能索引的策略" class="headerlink" title="高性能索引的策略"></a>高性能索引的策略</h3><p>​    正确创建和使用索引是实现高性能查询的基础。前面已经讲了各种类型的索引及其对应的优缺点。现在我们来看看如何真正发挥这些索引的优势。</p>
+<h4 id="独立的列"><a href="#独立的列" class="headerlink" title="独立的列"></a>独立的列</h4><p>​    如果列不是独立的话，那么MySQL就不会使用索引。<strong>独立的列指的是索引列不能是表达式的一部分，也不能是函数的参数。</strong></p>
+<p>​    举个例子</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">select actor_id from sakila.actor where actor_id + 1 = 5;</span><br></pre></td></tr></table></figure>
+
+<p>​    这里由于where后面的表达式有索引列，虽然这个表达式很简单，但是在语法解析树中是无法优化的，因此这个式子无法运用索引。</p>
+<p>​    这里我们需要做的是养<strong>成简化WHERE条件的习惯，始终将索引单独放在比较符号的一侧</strong>。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">select actor_id from sakila.actor where actor_id = 4;</span><br></pre></td></tr></table></figure>
+
+<h4 id="前缀索引和索引选择性"><a href="#前缀索引和索引选择性" class="headerlink" title="前缀索引和索引选择性"></a>前缀索引和索引选择性</h4><p>​    如果一个索引的字符串太长，让索引列变得大且慢怎么办？一个策略是前面的模拟哈希索引。但是哈希索引也有其缺点，这里的话可以用到<strong>前缀索引：将索引开始的部分字符</strong>。</p>
+<ul>
+<li>优点： 大大节约索引空间，从而提高索引效率</li>
+<li>缺点： 降低了索引选择性</li>
+</ul>
+<p>索引选择性指的是<strong>不重复的索引值（基数）和数据表记录总数的比值</strong>，选择性高的索引可以让MySQL在查找是过滤掉更多的行。<strong>唯一索引的选择性是1，性能最好。</strong></p>
+<p>​    因此本节的内容就清晰了，如果在索引字符串太大的时候，一般使用前缀索引来节约索引空间，从而提高索引效率，但是这样势必会降低索引选择性，导致索引的性能降低。这样的话，如何平衡前缀索引的提升效率和索引选择性降低导致的索引性能降低？ ——<strong>答案是选择合适的前缀索引长度</strong>。</p>
+<p>​    其诀窍在于要选择足够长的前缀以保证较高的选择性，但同时又不能太长（以便节约空间）。前缀应该足够长，以使得前缀索引的选择性接近于索引整个列。换句话说<strong>前缀列的基数最好要接近于完整列的基数。</strong>    </p>
+<p>​    另一个办法是直接计算前缀索引的选择性，如果再增加的话，选择性提高幅度很小，那么就使用该前缀长度。</p>
+<h4 id="多列索引"><a href="#多列索引" class="headerlink" title="多列索引"></a>多列索引</h4><p>​    首先，在多个列建立独立的单列索引大部分情况下并不能提高MySQL的查询性能。</p>
+<p>​    多列索引指的是该索引里面有多个列。一般来说当服务器对多个索引做相交操作时（通常有多个AND条件），通常要使用多列索引。</p>
+<p>​    既然是多列，如何用合适的顺序创建多列索引？<strong>将选择性最高的列放到索引最前列。</strong></p>
+<h4 id="聚簇索引"><a href="#聚簇索引" class="headerlink" title="聚簇索引"></a>聚簇索引</h4><p>​    这个在之前B+树索引中已经介绍过了，当表有聚簇索引时，<strong>它的数据行实际上存放在索引的叶子页中</strong>，<strong>一个表只有一个聚簇索引。这个索引称之为聚簇主键。</strong></p>
+<p>这里主要用来完善说明下该索引的优缺点。</p>
+<p>聚集数据的优缺点：</p>
+<p>优点：</p>
+<ul>
+<li>可以将相关数据保存在一起，对于磁盘I/O效率有提升。</li>
+<li>数据访问更快。这是因为聚簇索引将<strong>索引和数据都保存在同一个B-Tree中</strong>。</li>
+<li>使用覆盖索引扫描的查询可以直接用<strong>叶节点中的主键值</strong>。</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li><p>虽然提高了磁盘I/O效率，但是如果数据全部放在内存中的话，那这就没有什么优势了。</p>
+</li>
+<li><p>插入顺序严重依赖于插入顺序。</p>
+</li>
+<li><p>更新聚簇索引列的代价很高</p>
+</li>
+<li><p>聚簇索引可能会导致全表扫描变慢。</p>
+</li>
+<li><p>…</p>
+</li>
+</ul>
+<h4 id="覆盖索引"><a href="#覆盖索引" class="headerlink" title="覆盖索引"></a>覆盖索引</h4><p>​    <strong>如果一个索引包含（或者说覆盖）所有需要查询的字段的值，我们称之为“覆盖索引”</strong>。如果索引叶子节点包括需要差点值，那么就不需要回表查询，这样会大大提高查询效率。</p>
+<p>​    这个覆盖索引是指索引必须覆盖这些查询的全部列，不然还是得回表查询。</p>
+<p>​    <strong>而要确定一个查询是否是覆盖索引，我们只需要explain sql语句看Extra的结果是否是“Using index”即可。</strong></p>
+<p>​    其实就是如果需要回表查询，效率会低很多。如果索引中的叶子结点就有数据的话是很高效的。</p>
+<p>​    覆盖索引带来的好处</p>
+<ul>
+<li>索引条目通常远小于数据行大小，<strong>这样会极大地减少数据访问量</strong>（因为查索引就能看到）。</li>
+<li>因为索引是按值顺序存储的，那么对于I/O密集型的范围查询会比随机从磁盘中读取每行数据的I/O小的多。<strong>减少I/O操作。</strong></li>
+</ul>
+<h4 id="压缩索引"><a href="#压缩索引" class="headerlink" title="压缩索引"></a>压缩索引</h4><p>​    MyISAM使用前缀压缩来减少索引的大小，从而让更多的索引可以放入内存中，这样也能极大地提高性能。<strong>压缩块同样也是一个节约空间而会将操作变慢的一种方法。</strong></p>
+<h4 id="重复和冗余索引"><a href="#重复和冗余索引" class="headerlink" title="重复和冗余索引"></a>重复和冗余索引</h4><p>​    索引也是一个数据结构，如果有重复或者冗余的索引，一般情况下都直接丢弃。记得定期清理那些不用的索引。</p>
+<h4 id="索引和锁"><a href="#索引和锁" class="headerlink" title="索引和锁"></a>索引和锁</h4><p>​    索引可以让查询锁定更少的行。因为这类查询从不访问那些不需要的行，这样就会锁定更少的行。<strong>因此多使用索引反而还能减少锁的开销。</strong></p>
+<p>​    InnoDB只有在访问行的时候才会对其加锁，而索引能够减少InnoDB访问的行数，从而减少锁的数量。</p>
+<p>一个小tips：</p>
+<p>​    <strong>InnoDB在二级索引上使用共享锁，但访问主键索引需要排它锁。这消除了覆盖索引的可能性。</strong></p>
+<p>（这里不好理解啊）？？？？</p>
+<p>这里先贴个连接</p>
+<p><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/40396971">https://zhuanlan.zhihu.com/p/40396971</a></p>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>​    本章是MySQL中的超级重点章节。上面的描述应该算是比较清楚 。<strong>只需要知道索引是查询优化的一种手段，是一种数据结构，这种数据结构默认为B+树，有时可以为哈希表。</strong></p>
+<p>​    然后分别分析B+索引和哈希索引的特点</p>
+<p>​    分析完之后再来根据具体情况分析该用什么索引。</p>
+<p>​    最后的话题是索引和锁，这个算是难点，希望自己能够掌握。</p>
+<p>参考资料</p>
+<ul>
+<li>《高性能MySQL》</li>
+<li><a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/40396971">https://zhuanlan.zhihu.com/p/40396971</a></li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+  <div>
+    
+      <div>
+    
+        <div style="text-align:center;color: #ccc;font-size:14px;">-------------本文结束<i class="fa fa-paw"></i>感谢您的阅读-------------</div>
+    
+</div>
+
+    
+  </div>
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/MySQL/" rel="tag"><i class="fa fa-tag"></i> MySQL</a>
+          
+            <a href="/tags/%E7%B4%A2%E5%BC%95/" rel="tag"><i class="fa fa-tag"></i> 索引</a>
+          
+        </div>
+      
+
+      
+      
+        <div class="post-widgets">
+        
+
+        
+
+        
+          
+          <div id="needsharebutton-postbottom">
+            <span class="btn">
+              <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </span>
+          </div>
+        
+        </div>
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/posts/49316947/" rel="next" title="I/O模型">
+                <i class="fa fa-chevron-left"></i> I/O模型
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+    <div class="comments" id="comments">
+    </div>
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <img class="site-author-image" itemprop="image"
+                src="/images/avatar.gif"
+                alt="" />
+            
+              <p class="site-author-name" itemprop="name"></p>
+              <p class="site-description motion-element" itemprop="description"></p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">39</span>
+                  <span class="site-state-item-name">日志</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-categories">
+                <a href="/categories/index.html">
+                  <span class="site-state-item-count">9</span>
+                  <span class="site-state-item-name">分类</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                <a href="/tags/index.html">
+                  <span class="site-state-item-count">66</span>
+                  <span class="site-state-item-name">标签</span>
+                </a>
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/kromites" target="_blank" title="GitHub">
+                      
+                        <i class="fa fa-fw fa-github"></i>GitHub</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:chouwu9@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+            <div class="links-of-blogroll motion-element links-of-blogroll-block">
+              <div class="links-of-blogroll-title">
+                <!-- modify icon to fire by szw -->
+                <i class="fa fa-history fa-" aria-hidden="true"></i>
+                近期文章
+              </div>
+              <ul class="links-of-blogroll-list">
+                
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/43a71ae4/" title="MySQL索引" target="_blank">MySQL索引</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/49316947/" title="I/O模型" target="_blank">I/O模型</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/a093a7a8/" title="Reactor和Proactor模式" target="_blank">Reactor和Proactor模式</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/26ac1f1c/" title="Schema与数据类型优化" target="_blank">Schema与数据类型优化</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/f91535f/" title="MySQL架构" target="_blank">MySQL架构</a>
+                  </li>
+                
+              </ul>
+            </div>
+          
+
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B4%A2%E5%BC%95%E5%9F%BA%E7%A1%80"><span class="nav-number">1.</span> <span class="nav-text">索引基础</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#B-Tree%E7%B4%A2%E5%BC%95"><span class="nav-number">1.1.</span> <span class="nav-text">B-Tree索引</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#B-%E6%A0%91%E7%BB%93%E6%9E%84"><span class="nav-number">1.1.1.</span> <span class="nav-text">B+树结构</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95%E5%92%8C%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95"><span class="nav-number">1.1.2.</span> <span class="nav-text">聚簇索引和非聚簇索引</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#%E4%BA%8C%E8%80%85%E7%9A%84%E4%BC%98%E7%BC%BA%E7%82%B9"><span class="nav-number">1.1.3.</span> <span class="nav-text">二者的优缺点</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#B-%E6%A0%91%E7%B4%A2%E5%BC%95%E7%9A%84%E7%89%B9%E7%82%B9"><span class="nav-number">1.1.4.</span> <span class="nav-text">B+树索引的特点</span></a></li></ol></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%93%88%E5%B8%8C%E7%B4%A2%E5%BC%95"><span class="nav-number">1.2.</span> <span class="nav-text">哈希索引</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B4%A2%E5%BC%95%E7%9A%84%E4%BC%98%E7%82%B9"><span class="nav-number">2.</span> <span class="nav-text">索引的优点</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%AB%98%E6%80%A7%E8%83%BD%E7%B4%A2%E5%BC%95%E7%9A%84%E7%AD%96%E7%95%A5"><span class="nav-number">3.</span> <span class="nav-text">高性能索引的策略</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%8B%AC%E7%AB%8B%E7%9A%84%E5%88%97"><span class="nav-number">3.1.</span> <span class="nav-text">独立的列</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%89%8D%E7%BC%80%E7%B4%A2%E5%BC%95%E5%92%8C%E7%B4%A2%E5%BC%95%E9%80%89%E6%8B%A9%E6%80%A7"><span class="nav-number">3.2.</span> <span class="nav-text">前缀索引和索引选择性</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%9A%E5%88%97%E7%B4%A2%E5%BC%95"><span class="nav-number">3.3.</span> <span class="nav-text">多列索引</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95"><span class="nav-number">3.4.</span> <span class="nav-text">聚簇索引</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E8%A6%86%E7%9B%96%E7%B4%A2%E5%BC%95"><span class="nav-number">3.5.</span> <span class="nav-text">覆盖索引</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%8E%8B%E7%BC%A9%E7%B4%A2%E5%BC%95"><span class="nav-number">3.6.</span> <span class="nav-text">压缩索引</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E9%87%8D%E5%A4%8D%E5%92%8C%E5%86%97%E4%BD%99%E7%B4%A2%E5%BC%95"><span class="nav-number">3.7.</span> <span class="nav-text">重复和冗余索引</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%B4%A2%E5%BC%95%E5%92%8C%E9%94%81"><span class="nav-number">3.8.</span> <span class="nav-text">索引和锁</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">4.</span> <span class="nav-text">总结</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">kromite</span>
+
+  
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-area-chart"></i>
+    </span>
+    
+      <span class="post-meta-item-text">Site words total count&#58;</span>
+    
+    <span title="Site words total count">113.7k</span>
+  
+</div>
+<!--
+
+  <div class="powered-by">由 <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a> 强力驱动</div>
+
+
+
+
+
+
+-->
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+          <span id="scrollpercent"><span>0</span>%</span>
+        
+      </div>
+    
+
+    
+      <div id="needsharebutton-float">
+        <span class="btn">
+          <i class="fa fa-share-alt" aria-hidden="true"></i>
+        </span>
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/canvas-nest/canvas-nest.min.js"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  <script src="//cdn1.lncld.net/static/js/3.0.4/av-min.js"></script>
+  <script src="/js/src/Valine.min.js"></script>
+  
+  <script type="text/javascript">
+    new Valine({
+        lang: 'zh-cn',
+        admin_email:'480133937@qq.com', //填写博主邮箱 
+        el: '#comments' ,
+        appId: '13aTGA3gDu8Gibktc3NPEo53-gzGzoHsz',
+        appKey: '7IKWdcFuKxDvzojhVxVwYJtG',
+        emoticon_url: 'https://cloud.panjunwen.com/alu',
+        emoticon_list: ["狂汗.png","不说话.png","汗.png","坐等.png","献花.png","不高兴.png","中刀.png","害羞.png","皱眉.png","小眼睛.png","暗地观察.png"],
+        placeholder: 'Please comment here',
+  });
+  </script>
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    var isXml = true;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    } else if (/json$/i.test(search_path)) {
+      isXml = false;
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      var $localSearchInput = $('#local-search-input');
+      $localSearchInput.attr("autocapitalize", "none");
+      $localSearchInput.attr("autocorrect", "off");
+      $localSearchInput.focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+
+      // start loading animation
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay">' +
+          '<div id="search-loading-icon">' +
+          '<i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>' +
+          '</div>' +
+          '</div>')
+        .css('overflow', 'hidden');
+      $("#search-loading-icon").css('margin', '20% auto 0 auto').css('text-align', 'center');
+
+      $.ajax({
+        url: path,
+        dataType: isXml ? "xml" : "json",
+        async: true,
+        success: function(res) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = isXml ? $("entry", res).map(function() {
+            return {
+              title: $("title", this).text(),
+              content: $("content",this).text(),
+              url: $("url" , this).text()
+            };
+          }).get() : res;
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+
+          // remove loading animation
+          $(".local-search-pop-overlay").remove();
+          $('body').css('overflow', '');
+
+          proceedsearch();
+        }
+      });
+    }
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+  
+    
+  
+  <link rel="stylesheet" href="">
+
+  
+  
+  <script src="/lib/needsharebutton/needsharebutton.js"></script>
+
+  <script>
+    
+      pbOptions = {};
+      
+          pbOptions.iconStyle = "default";
+      
+          pbOptions.boxForm = "horizontal";
+      
+          pbOptions.position = "bottomCenter";
+      
+          pbOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-postbottom', pbOptions);
+    
+    
+      flOptions = {};
+      
+          flOptions.iconStyle = "default";
+      
+          flOptions.boxForm = "vertical";
+      
+          flOptions.position = "topRight";
+      
+          flOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-float', flOptions);
+    
+  </script>
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
