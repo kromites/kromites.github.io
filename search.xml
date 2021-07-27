@@ -28,6 +28,218 @@
       </tags>
   </entry>
   <entry>
+    <title>MySQL查询性能优化</title>
+    <url>/posts/42812f47/</url>
+    <content><![CDATA[<blockquote>
+<p>上篇文章讲了讲MySQL中的索引。索引的发明本质上是优化查询的一种手段。本篇文章就来直接来讲讲MySQL是如何对查询进行性能优化。</p>
+</blockquote>
+<span id="more"></span>
+
+<p>​    针对设计一个高性能MySQL来说，<strong>查询优化、索引优化、库表结构</strong>优化三者都得有。本章的目标是帮助大家更深刻地理解MySQL如何真正地执行查询，并明白高效和低效的原因所在。发挥MySQL的优势、</p>
+<h3 id="查询速度为何会慢"><a href="#查询速度为何会慢" class="headerlink" title="查询速度为何会慢"></a>查询速度为何会慢</h3><p>​    编写一个快速的查询的重点是响应时间。如果把查询看做是一个任务，这个任务中会有很多子任务，查询优化就是要将这些子任务进行优化。</p>
+<p>​    要想了解查询为何会这么慢，首先得了解查询的生命周期：</p>
+<ul>
+<li>客户端发送命令    （查询起始点）</li>
+<li>服务器接收命令    （<strong>网络因素</strong>）</li>
+<li>服务器解析命令    （<strong>CPU 计算能力因素</strong>）</li>
+<li>生成执行计划</li>
+<li><strong>执行</strong>                         <strong>（对存储引擎的API的调用）</strong></li>
+<li>将结果返回客户端   （查询终止点）</li>
+</ul>
+<p>​    <strong>执行是整个生命周期中最重要的阶段，这其中包括了大量为了检索数据到存储引擎的调用以及调用后的数据处理，包括排序分组等。</strong>尤其是向存储引擎检索数据的调用操作，<strong>这些调用需要在内存操作、CPU操作和内存不足时导致的I/O操作上消耗时间。根据存储引擎的不同，可能还会产生大量的上下文切换以及系统调用。</strong></p>
+<p>​    总结来说，存储引擎的API调用是最值得去优化的，但是其他因素也需要考虑，我们需要的是去减少和消除一些不必要操作的花费时间，来提高查询速度。</p>
+<h3 id="慢查询基础：优化数据访问"><a href="#慢查询基础：优化数据访问" class="headerlink" title="慢查询基础：优化数据访问"></a>慢查询基础：优化数据访问</h3><p>​    <strong>查询性能低下最基本的原因是访问的数据太多。</strong>大部分性能低下的查询都可以通过减少访问的数据量的方式进入优化。对于低效的查询，我们发现通过下面两个步骤来分析总是很有效。</p>
+<ul>
+<li>确定应用程序是否在检索大量超过需要的数据。</li>
+<li>确定MySQL<strong>服务器层是否在分析大量超过需要的数据行</strong>。</li>
+</ul>
+<h4 id="是否向数据库请求了不需要的数据"><a href="#是否向数据库请求了不需要的数据" class="headerlink" title="是否向数据库请求了不需要的数据"></a>是否向数据库请求了不需要的数据</h4><p>​    客户端向服务器的查询是否是需要实际的需求数据，因为有些查询会请求超过实际需求的数据，然后这些多余数据会被应用程序丢弃。这会给MySQL服务器带来额外的负担，并增加网络开销，另外也会消耗应用服务器的CPU和内存资源。</p>
+<p>​    这里有些典型案例：</p>
+<ul>
+<li>查询不需要的记录：只要10条却查询100条，虽然页面也只是显示10条，其实如果用LIMIT就可以解决。</li>
+<li>多表关联时返回全部列：这个尽量明确只SELECT取出的列。</li>
+<li>总是取出全部列：<strong>别用SELECT*，代价很大</strong></li>
+<li>重复查询相同的数据： 这个的话可以使用缓存，这样二次查询相同数据就会很快。</li>
+</ul>
+<h4 id="MySQL是否在扫描额外的记录"><a href="#MySQL是否在扫描额外的记录" class="headerlink" title="MySQL是否在扫描额外的记录"></a>MySQL是否在扫描额外的记录</h4><p>对于MySQL，最简单的衡量查询开销的三个指标如下：</p>
+<ul>
+<li>响应时间</li>
+<li>扫描的行数</li>
+<li>返回的行数</li>
+</ul>
+<p>这三个指标都会记录到MySQL的慢日志中，所以<strong>检查慢日志记录是找出扫描行数过多的查询的好办法。</strong></p>
+<ul>
+<li><p>响应时间分为排队时间和服务时间，这个由于实际情况复杂很难判断，只能用一个参考值。</p>
+</li>
+<li><p>扫描行数和返回行数：<strong>理想情况下二者应该相同，但是一般不可能。我们希望能控制在1:1到10:1之间。</strong></p>
+</li>
+<li><p>扫描行数和访问类型：直接从表中找到某一行数据的成本比较大，MySQL有几种访问方式能够查找并返回一行结果。</p>
+<p>访问类型一般有全表扫描，索引扫描，范围扫描等。一般没有合适的访问类型，那么解决的最好办法是加个合适的索引。</p>
+<p>一般来说MySQL能够用三种方法来应用WHERE条件，从好到坏依次为：</p>
+<ol>
+<li><strong>在索引中使用WHERE条件来过滤不匹配的记录。 这是在存储引擎层完成的</strong>。</li>
+<li><strong>使用索引覆盖扫描（在EXTRA列中出现了Using Index）来返回记录</strong>，直接从索引中过滤不需要的记录并返回命中的结果。这是MySQL服务器完成的，不需要回表查询。</li>
+<li>从数据表中返回数据，过滤不满足条件的记录（在EXTRA列中出现了Using Where）。服务器层完成，而且要回表查询。</li>
+</ol>
+<p>如何优化？</p>
+<ol>
+<li>使用索引覆盖扫描，把<strong>所有需要的列放入索引中</strong>，这样就不需要回表。</li>
+<li>改变库表结构。</li>
+<li>重写复杂的查询，让MySQL优化器更优化执行该查询。</li>
+</ol>
+</li>
+</ul>
+<h3 id="重构查询的方式"><a href="#重构查询的方式" class="headerlink" title="重构查询的方式"></a>重构查询的方式</h3><p>​    在优化有问题的查询时，目标应该是找到一个更优的方法获得实际需要的结果。有时候，可以将查询转换一种写法让其返回一样的结果，但其性能更好。</p>
+<p>​    这一节我们将介绍如何通过这种方式来重构查询，并展示何时需要使用这样的技巧。</p>
+<h4 id="一个复杂查询还是多个简单查询"><a href="#一个复杂查询还是多个简单查询" class="headerlink" title="一个复杂查询还是多个简单查询"></a>一个复杂查询还是多个简单查询</h4><p>​    一般来说，在传统的网络通信服务器中，使用多个查询会浪费服务器的连接资源，但是由于MySQL设计让连接的建立和销毁都很轻量级，网络带宽也很大，因此在网络上多个小查询和单个查询差别不是那么大。</p>
+<p>​    因此针对是单个复杂查询还是多个简单查询，主要还是看查询语句在服务器层和引擎层的花销，如果多个简单查询这些花销更小的话，那就可以使用多个简单查询。</p>
+<p>​    当然，在其他条件差不多的时候，单个查询肯定是优于多个查询的。</p>
+<h4 id="切分查询"><a href="#切分查询" class="headerlink" title="切分查询"></a>切分查询</h4><p>​    <strong>有时候对于一个大查询我们需要“分而治之”，将大查询切分成小查询，每个查询功能完全一样，只完成一小部分，每次也只返回一部分数据。</strong></p>
+<p>​    举个例子，一次删除100万条数据服务器压力会很大，但是一次删除一万条数据，分十次删除，这样能够减少服务器压力。 </p>
+<h4 id="分解关联查询"><a href="#分解关联查询" class="headerlink" title="分解关联查询"></a>分解关联查询</h4><p>​    SQL最强大的功能之一就是在数据检索查询的执行中关联（join）表。不过，关联表是一个非常耗费资源的操作，而且关联的表越多，那查询性能下降得越厉害。</p>
+<p>​    很多高性能应用都会对关联查询进行分解。简单地，可以对每个表进行一次单表查询，然后将结果在应用程序中进行关联。</p>
+<p>​    下面我们举个例子</p>
+<p>关联查询是由JOIN组成的查询。举个例子</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">&gt; 	SELECT * FROM tag</span><br><span class="line">		JOIN tag_post ON tag_post.tag_id = tag.id</span><br><span class="line">		JOIN post ON tag_post.tag_id = post.id</span><br><span class="line">	WHERE tag.tag = &#x27;mysql&#x27;;</span><br><span class="line"></span><br><span class="line"># 分解查询</span><br><span class="line"></span><br><span class="line">&gt;	SELECT * FROM tag where tag=&#x27;mysql&#x27;;</span><br><span class="line">&gt; 	SELECT * FROM tag_post where tag_id = 1234;</span><br><span class="line">&gt;	SELECT * FROM post where post.id in (123, 456, 567, 9098,8904);</span><br></pre></td></tr></table></figure>
+
+<p>分解查询的优势：</p>
+<ul>
+<li><strong>让缓存效率更高</strong>。许多应用程序都可以方便缓存单表查询对应的结果对象。例如，上面查询中的tag被缓存了，那么应用就可以跳过第一个查询。</li>
+<li>将查询分解后，执行单个查询时能够减少锁的竞争。</li>
+<li>在应用层做关联，可以更容易对数据库进行拆分，更容易做到高性能和可扩展。</li>
+<li><strong>查询本身效率也可能会有所提升。</strong>该例子中第三个查询使用了IN代替关联查询，可以让MySQL按照ID顺序进行查询，这可能比随机的关联要更高效。之后会详细介绍。</li>
+<li><strong>可以减少冗余记录的查询</strong>。</li>
+</ul>
+<h3 id="查询执行的基础"><a href="#查询执行的基础" class="headerlink" title="查询执行的基础"></a>查询执行的基础</h3><p>​    当希望MySQL能够以更高的性能运行查询时，最好的办法就是弄清楚MySQL是如何优化和执行查询的。</p>
+<p>下图就是查询执行路径</p>
+<img src="/posts/undefined/%E6%9F%A5%E8%AF%A2%E6%89%A7%E8%A1%8C%E8%B7%AF%E5%BE%84.jpg" class title="查询执行路径">
+
+<ol>
+<li>客户端发送一条查询给服务器。</li>
+<li><strong>服务器先检查查询缓存，如果命中缓存，则立刻返回存储在缓存中的记过。否则进入下一阶段。</strong></li>
+<li><strong>服务器进行SQL解析，预处理，再由优化器生成对应的执行计划。</strong></li>
+<li>MySQL根据优化器生成的<strong>执行计划</strong>，<strong>调用存储引擎的API来执行查询</strong>。</li>
+<li>将结果返回给客户端。</li>
+</ol>
+<h4 id="MySQL网络通信协议"><a href="#MySQL网络通信协议" class="headerlink" title="MySQL网络通信协议"></a>MySQL网络通信协议</h4><p>​    MySQL网络通信协议是<strong>半双工通信协议</strong>。这意味着只能由一端发送数据给另外一端，不能够同时发送数据。这就要控制发送数据的量。这个是查询执行的第一步</p>
+<p>​    服务器返回给客户端的数据客户端必须全部接收，而且在查询完成后才能释放资源。</p>
+<p>一般来说在查询时候有着以下的状态</p>
+<ul>
+<li><p>sleep：线程正在等待客户端发送新的请求</p>
+</li>
+<li><p>query：线程正在执行查询或者正在将结果发送给客户端</p>
+</li>
+<li><p>locked：在MySQL服务器层，该线程正在等待表锁</p>
+<p>…</p>
+</li>
+</ul>
+<h4 id="查询缓存"><a href="#查询缓存" class="headerlink" title="查询缓存"></a>查询缓存</h4><p>​    查询缓存是查询执行的第一步。如果查询缓存打开，那么MySQL会优先检查这个查询是否命中查询缓存中的数据。如果命中查询缓存。那么直接从缓存中获得结果，不需要去解析SQL语句。（这个和所有的缓存都一样，但是这个查询缓存里面存放的是语句，<strong>因为这个时候完全没有解析SQL，所以存的也是sql语句</strong>）</p>
+<p>​    <strong>不过查询缓存的检查是通过一个对大小写敏感的哈希查找实现的。查询和缓存中的查询即使有一个字节不同，也不会匹配结果。</strong></p>
+<p>​    在查询缓存中命中的数据，那么检查完用户权限合格后直接跳过之后所有操作返回结果。</p>
+<h4 id="查询优化处理"><a href="#查询优化处理" class="headerlink" title="查询优化处理"></a>查询优化处理</h4><p>​    第三个阶段就是最重要的查询优化阶段了。该阶段将一个SQL转换成一个执行计划。这包括多个子阶段： 解析SQL，预处理，优化SQL执行计划。</p>
+<ul>
+<li><p>语法解析器和预处理：</p>
+<p>MySQL通过关键字将SQL语句进行解析，并生成一个对应的“<strong>解析树”</strong>。MySQL解析器将使用MySQL语法规则验证和解析查询。<strong>预处理器会进一步检查是否合法，并且验证用户权限</strong>。（其实就是验证这个解析树的合法性）</p>
+</li>
+<li><p>查询优化器：</p>
+<p><strong>当该语句是合法的，那么查询优化器的作用就是找到其中最好的执行计划。（优化器是基于成本的，会选取预测成本最低的一种方法。）</strong></p>
+<p>查询优化器很复杂，一般用了两种优化策略：<strong>静态优化和动态优化</strong>。</p>
+<p>静态优化是对解析树直接进行分析，并完成优化。（编译时优化）</p>
+<p>动态优化和查询上下文等因素有关，每次查询都要重新评估。（运行时优化）</p>
+</li>
+<li><p>关联查询的优化</p>
+<p><strong>迭代使用嵌套循环</strong>，<strong>选择代价最小的关联顺序</strong>。</p>
+<p>因为mysql的关联查询不是平衡二叉树，而是左侧深度优先树。这样的话如果先查询代价较大的表会让整个效率都变低。因此首先查询代价较小的表，这样会生成一颗成本最小的关联树。</p>
+</li>
+<li><p>排序优化</p>
+<p><strong>排序是一个成本很高的操作，我们要避免使用。</strong>（如果要有排序操作尽量使用索引）</p>
+<p>如果使用的话，这里也有个排序优化，即<strong>先读取查询所需要的所有列，然后再根据给定列进行排序，最后直接返回排序结果。</strong></p>
+</li>
+</ul>
+<h4 id="查询执行引擎"><a href="#查询执行引擎" class="headerlink" title="查询执行引擎"></a>查询执行引擎</h4><p>​    在查询优化阶段，MySQL生成查询对应的执行计划，MySQL的查询执行引擎则根据这个执行计划来完成整个查询。</p>
+<p>​    查询执行阶段并不复杂，只是据执行计划给出的指令逐步执行。执行过程中会使用到很多针对存储引擎接口实现的调用。</p>
+<h4 id="返回结果客户端"><a href="#返回结果客户端" class="headerlink" title="返回结果客户端"></a>返回结果客户端</h4><p>​    <strong>先将查询结果返回到查询缓存中。</strong></p>
+<p>​    <strong>MySQL将结果集增量、逐步返回给客户端，即生成第一条结果就开始返回结果。</strong></p>
+<ul>
+<li><p><strong>服务器不需要存储太多结果，这样减少内存消耗。</strong></p>
+</li>
+<li><p><strong>客户端也在第一时间得到返回的结果数据。</strong></p>
+</li>
+</ul>
+<p>​    （这里要注意的是结果是增量且逐步的返回给客户端）</p>
+<p>其实这一节的内容信息量很大，相当于是经历了一个命令发送到接收结果的整个流程。在这过程中最重要的肯定是<strong>如何进行查询优化处理</strong>。</p>
+<h4 id="查询优化器的局限性"><a href="#查询优化器的局限性" class="headerlink" title="查询优化器的局限性"></a>查询优化器的局限性</h4><p>​    MySQL的万能“嵌套循环”并不是对每种查询都是最优的。但是对大部分查询都能最优解，只对少部分查询不适用。下面就是一些查询优化未能解决的一些场景。</p>
+<ul>
+<li><p>关联子查询</p>
+<p><strong>当这个子查询内部的查询和外部表相关联的时候，MySQL会将相关的外层表压到子查询中，它认为这样可以更加高效。</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mysql&gt;	select * from sakila.film</span><br><span class="line">	-&gt;  where film_id IN (</span><br><span class="line">	-&gt;		select film_id from sakila.film_actor where actor_id = 1);</span><br><span class="line">	</span><br><span class="line"># 会“优化”成下面代码</span><br><span class="line">mysql&gt;	select * from sakila.film</span><br><span class="line">	-&gt;	where exists ( </span><br><span class="line">    -&gt;    select * from sakila.film_actor where actor_id = 1</span><br><span class="line">    -&gt;	  AND file_actor.film_id = film.film_id );</span><br></pre></td></tr></table></figure>
+
+<p>上面的代码将<strong>外表film也放到了子查询中，这样不好，因为如果外层表是个非常大的表，那么效率会非常糟糕。</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mysql&gt; 	select film.* from sakila.film</span><br><span class="line">	-&gt; 		inner join sakila.film_actor using(film_id)</span><br><span class="line">	-&gt; 		where actor_id = 1;</span><br></pre></td></tr></table></figure>
+
+<p>但是不是所有的关联子查询效率都会差，这个要自己测试，然后判断。</p>
+</li>
+<li><p>UNION的限制</p>
+<p><strong>UNION是将两个表的记录联合起来放入一个临时表中，如果没有对两个表分别加上limit的限制的话，那么导入的是全表</strong>，如果是将两个表排序选出前20，那么最好先分别在两个表中选出前20，再union，再从这40条中选出前20,这样会极大的减少构建临时表的负担。</p>
+</li>
+<li><p>索引合并优化</p>
+<p>前面讨论过了，<strong>MySQL能够访问单个表的多个索引以合并和交叉过滤的方式来定位需要查找的行。</strong></p>
+</li>
+<li><p>等值传递</p>
+<p>等值传递会带来一些意料之外的额外消耗。</p>
+</li>
+<li><p>并行执行</p>
+<p>MySQL做不到。</p>
+<p>….</p>
+</li>
+</ul>
+<h3 id="优化特定的查询"><a href="#优化特定的查询" class="headerlink" title="优化特定的查询"></a>优化特定的查询</h3><p>​    本节所介绍的多数优化技巧都和特定的版本有关。</p>
+<h4 id="优化COUNT-查询"><a href="#优化COUNT-查询" class="headerlink" title="优化COUNT()查询"></a>优化COUNT()查询</h4><p>这个函数是一个特殊的函数。他有两个作用</p>
+<ul>
+<li><p>可以统计某个列值的数量，这个作用下列值不能为空。如果括号内的表达式指定了列，那么就是这个功能。</p>
+</li>
+<li><p>可以统计结果集的行数。 当count的括号内的表达式值不可能为空时，实际上就是在统计行数。</p>
+<p>所以，对于<strong>count(*)，不会扩展所有的列，而是忽略所有列直接返回总行数。</strong></p>
+</li>
+</ul>
+<p>总之，count是一个统计行数或者列值的函数，一般要扫描大量数据，这种情况下必须对其进行优化，如索引覆盖。但是针对count（*）是个特例。</p>
+<h4 id="优化关联查询"><a href="#优化关联查询" class="headerlink" title="优化关联查询"></a>优化关联查询</h4><p>关联查询这个问题整本书都在讨论。以下有一些优化规则</p>
+<ul>
+<li><strong>确保ON或者USING子句中的列上有索引。</strong></li>
+<li><strong>确保<code>group by</code> 和 <code>order by</code>中表达式只涉及到一列。这样容易使用索引优化</strong>。</li>
+</ul>
+<h4 id="优化子查询"><a href="#优化子查询" class="headerlink" title="优化子查询"></a>优化子查询</h4><p><strong>尽可能使用关联查询代替子查询。</strong></p>
+<h4 id="优化GROUP-BY和DISTINCT"><a href="#优化GROUP-BY和DISTINCT" class="headerlink" title="优化GROUP BY和DISTINCT"></a>优化GROUP BY和DISTINCT</h4><p>​    一般来说MySQL都使用同样的方法优化这两种这两种方法都是有索引的话，就用索引优化，<strong>索引是最有效的优化办法。</strong></p>
+<p>​    当无法使用索引的时候，那么一般都会产生一个临时表来执行这两个操作。不过这样的话明显不是很高效。</p>
+<h4 id="优化LIMIT分页"><a href="#优化LIMIT分页" class="headerlink" title="优化LIMIT分页"></a>优化LIMIT分页</h4><p>如果是<code>limit 10000,10</code>那么会先返回10010条数据，然后取最后10条，这样的话效率也很低。</p>
+<p>这里最简单的办法是尽可能使用<strong>索引覆盖扫描</strong>，而不是查询所有的列。然后根据需要做<strong>一次关联操作再返回所需的列。</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">mysql&gt;	select film_id, description from sakila.film order by title limit 50, 5;</span><br></pre></td></tr></table></figure>
+
+<p>利用上面的方式优化</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line"># 使用film_id索引，先进行一次关联操作，在关联操作中返回所需要的55行数据，然后再返回所需要的列。</span><br><span class="line">mysql&gt;	select film.film_id, film_description</span><br><span class="line">			from sakila.film</span><br><span class="line">				inner join(</span><br><span class="line">                	select film_id from sakila.film</span><br><span class="line">                	order by title limit 50, 5</span><br><span class="line">                ) AS lim using(film_id)</span><br></pre></td></tr></table></figure>
+
+
+
+<ul>
+<li>其他优化：这些优化在使用中都是很有用的，以后可以当字典看。</li>
+</ul>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>​    本篇文章的内容很多，因为对实际操作数据库经验不足，只能流于表面的讲讲。在我看来，首先要掌握查询执行的过程（在此过程中能够意识到执行时间都消耗在哪），然后要意识到索引优化对查询的重要性。之后呢，就该了解查询优化器的工作原理。最后了解一下常见关键字的优化。</p>
+<p>​    最后，schema设计，索引设计和查询语句设计之外，查询优化是设计高性能MySQL的最后一步。<strong>优化通常要三管齐下：不做、少做、快速地做。</strong></p>
+<p>​    之后的文章可能就是一些MySQL的高级特性了，比如分区分表之类的，留给下一篇文章讲。</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《高性能MySQL》</li>
+</ul>
+]]></content>
+      <categories>
+        <category>MySQL</category>
+      </categories>
+      <tags>
+        <tag>MySQL</tag>
+        <tag>查询优化</tag>
+        <tag>慢查询</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>MySQL索引</title>
     <url>/posts/43a71ae4/</url>
     <content><![CDATA[<blockquote>
@@ -46,18 +258,18 @@
 <h4 id="B-Tree索引"><a href="#B-Tree索引" class="headerlink" title="B-Tree索引"></a>B-Tree索引</h4><p>​    这个是索引的主要类型。底层为B+树数据结构。</p>
 <h5 id="B-树结构"><a href="#B-树结构" class="headerlink" title="B+树结构"></a><strong>B+树结构</strong></h5><p>​    首先我们来简单介绍下B+树</p>
 <p><img src="/posts/43a71ae4/Users\16258\Desktop\hexo\source_posts\MySQL索引\B树介绍.png" alt="image-20210726163709331"></p>
-<img src="/posts/undefined/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png" class title="B+树介绍">
+<img src="/posts/43a71ae4/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png" class title="B+树介绍">
 
 <p>​    不过B+树的插入和删除操作会导致其结构发生变化，但是永远会保持平衡，而且根节点到叶子节点的距离永远相同。<strong>这样为了保持平衡对于新插入的键值可能需要做大量的拆分页操作</strong>。因为B+树结构主要用于磁盘，页的拆分意味着磁盘的操作，所以应该在可能的情况下减少页的拆分，因此B+树也有类似于AVL树的旋转操作，以减少页拆分的次数。</p>
 <p><strong>从上可以看出B+树存储的所有的值都是按顺序存储的，并且每一个叶子页到根的距离相同。</strong></p>
 <p>B+树索引的本质就是B+树在数据库中的实现。一般数据库中的实现的B树都是2<del>4层，这样一来具有<strong>高扇出性</strong>，查找某一键值的行记录最多只需要2</del>4次。对于一般机械键盘也只需0.02~0.04s。</p>
 <h5 id="聚簇索引和非聚簇索引"><a href="#聚簇索引和非聚簇索引" class="headerlink" title="聚簇索引和非聚簇索引"></a><strong>聚簇索引和非聚簇索引</strong></h5><p>​    B+树索引可以分为<strong>聚簇索引和非聚簇索引</strong>，不管是聚集索引还是辅助索引，内部都是B+树，即高度平衡的，叶子节点存放所有的数据。但是二者有着以下的差别</p>
 <p>​    B+树是左小右大的顺序存储结构，节点只包含id索引列，而叶子节点包含索引列和数据，<strong>这种数据和索引在一起存储的索引方式叫做聚簇索引</strong>，<strong>一张表只能有一个聚簇索引。假设没有定义主键，InnoDB会选择一个唯一的非空索引代替，如果没有的话则会隐式定义一个主键作为聚簇索引</strong>。</p>
-<p>​    <img src="/posts/undefined/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="聚簇索引"></p>
+<p>​    <img src="/posts/43a71ae4/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="聚簇索引"></p>
 <p>​    上图主键聚簇索引存储的结构，那么非聚簇索引的结构是什么样子呢？<strong>非聚簇索引(二级索引)叶子节点保存的不是数据，而是主键id值</strong>，这一点和myisam保存的是数据地址是不同的。 <strong>非聚簇索引通过先查询到该数据的主键id值后，再通过主键id值去查找该表中唯一的聚簇索引，通过聚簇索引得到真正的数据</strong>，这个也是被称作二级索引的原因， 因为它查完还得查聚簇。</p>
-<p>​    <img src="/posts/undefined/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="非聚簇索引"></p>
+<p>​    <img src="/posts/43a71ae4/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="非聚簇索引"></p>
 <p>​    最终，我们一张图可以看看InnoDB和Myisam聚簇和非聚簇索引的区别</p>
-<p>​    <img src="/posts/undefined/%E5%8C%BA%E5%88%AB.png" class title="区别"></p>
+<p>​    <img src="/posts/43a71ae4/%E5%8C%BA%E5%88%AB.png" class title="区别"></p>
 <p>​    <strong>上图可以看出InnoDB的叶子扇区存放的整行数据，而MyISAM存放的是指向行数据的指针。</strong></p>
 <h5 id="二者的优缺点"><a href="#二者的优缺点" class="headerlink" title="二者的优缺点"></a><strong>二者的优缺点</strong></h5><p>​    <strong>聚簇索引的优点在于对于使用主键的排序查找和范围查找速度非常快，因为叶子节点的数据就是用户徐亚查询所要的数据。</strong></p>
 <p>​    范围查找是因为可以通过叶子节点的上层中间节点得到页的范围，之后直接读取数据页即可。</p>
@@ -292,6 +504,67 @@
 <p>服务器程序一般需要处理三类事件：I/O事件，信号及定时事件。这些事件可以有两种高效的事件处理模式：Reactor和Proactor模式。一般来说同步I/O模型通常用于Reactor模式，异步I/O模型则用于实现Proactor模式。如果不懂什么是同步I/O，什么是异步I/O，可以先去看看之前的I/O模型文章。</p>
 </blockquote>
 <span id="more"></span>
+
+<h3 id="Reactor模式"><a href="#Reactor模式" class="headerlink" title="Reactor模式"></a>Reactor模式</h3><p>​    Reactor是这样一种模式，它要<strong>求主线程（I/O处理单元）只负责监听文件描述符上是否有事件发生，有的话立即将该事件通知工作线程（逻辑单元）。</strong>除此之外，主线程不作任何其它实质性的工作。读写数据，接收新的连接，以及处理客户请求都在工作线程中完成。</p>
+<p>​    不过值得注意的是，在自己的项目中为了简化线程数，功能有点不同</p>
+<p>​    主线程的作用有：</p>
+<ul>
+<li><p>接收新的连接（将连接派发给其他工作线程）</p>
+</li>
+<li><p>进行I/O多路复用，监听事件</p>
+</li>
+<li><p>注册回调函数</p>
+</li>
+</ul>
+<p>​    工作线程的作用有</p>
+<ul>
+<li>处理事件<ul>
+<li>对于可读事件，进行读操作</li>
+<li>对于可写事件，进行写操作</li>
+<li>对于时间事件，进行定时操作</li>
+</ul>
+</li>
+</ul>
+<p>​    使用同步I/O模型（以<code>epoll_wait</code>为例）实现的Reactor模式的工作流程是：</p>
+<ol>
+<li>主线程往epoll内核事件表中注册一个socket上的就绪读事件。</li>
+<li>主线程调用<code>epoll_wait</code>等待socket上有数据可读。</li>
+<li>当socket上有数据可读时，<code>epoll_wait</code>通知主线程。主线程则将socket可读事件放入请求队列。</li>
+<li>睡眠在请求队列上的某个工作线程被唤醒，它从socket读取数据，并处理客户请求，然后往epoll内核事件表中注册该socket上的写就绪事件。</li>
+<li>主线程调用<code>epoll_wait</code>等待socket可写。</li>
+<li>当socket可写时，epoll_wait通知主线程。主线程将socket可写事件放入请求队列。</li>
+<li>睡眠在请求队列上的某个工作线程被唤醒，它往socket上写入服务器处理客户请求结果。</li>
+</ol>
+<p>下图为Reactor模式的工作流程：</p>
+
+
+<p>该模式的核心还是基于事件驱动，而监视事件一般是通过主线程I/O多路复用来实现的。</p>
+<h3 id="Proactor模式"><a href="#Proactor模式" class="headerlink" title="Proactor模式"></a>Proactor模式</h3><p>​    Proactor模式与reactor模式不同，<strong>Proactor模式将所有I/O操作都交给主线程和内核来处理，工作线程仅仅只负责业务逻辑部分。</strong></p>
+<p>​    一般来说Proactor模式是使用异步I/O模型（以<code>aio_read</code>和<code>aio_write</code>为例）实现的Proactor模式的工作流程：</p>
+<ol>
+<li><strong>主线程调用<code>aio_read</code>函数向内核注册socket读完成事件，并告诉内核用户读缓冲区的位置，以及读操作如何通知应用程序（比如使用信号）。</strong></li>
+<li>主线程继续处理其他逻辑。</li>
+<li>当socket上的数据被读入用户缓冲区后，内核将向应用程序发送一个信号，通知应用程序数据可用。</li>
+<li>应用程序预先定义好的信号处理函数选择一个工作线程来处理客户请求。工作线程处理完客户请求之后，调用<code>aio_read</code>函数向内核注册socket上的写完成事件，并告诉内核用户写缓冲区的位置，以及写操作完成时如何通知应用程序。</li>
+<li>主线程继续处理其他逻辑。</li>
+<li>当域用户缓冲区被写入socket之后，内核奖项应用程序发送一个信号，已通知应用程序数据已经发送完毕。</li>
+<li>应用程序预先定义好的信号处理函数选择一个工作线程来做善后处理，比如决定是否关闭socket。</li>
+</ol>
+<p>下图总结了Proactor模式的工作流程。</p>
+<img src="/posts/a093a7a8/Proactor%E6%A8%A1%E5%9E%8B.jpg" class title="Proactor模型">
+
+<p>总结一下就是Proactor模式是内核用来去处理I/O操作，用户注册操作完成通知机制，然后主线程直接执行数据读写操作，执行完之后，主线程向工作线程通知这一“完成事件”，工作线程直接获得数据读写结果，接下来做的只是对结果的逻辑处理。</p>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>其实这两个模式的对比完美的展现出了同步I/O和异步I/O的区别：</p>
+<ul>
+<li><strong>同步I/O：内核向进程通知就绪事件，然后应用程序来执行I/O操作</strong></li>
+<li><strong>异步I/O：内核向进程通知完成事件，在此之前内核已经执行完了I/O操作</strong></li>
+</ul>
+<p>不过这是I/O层次上的同步异步。</p>
+<p>如果是在并发模式下，同步异步又有新的差别</p>
+<ul>
+<li>同步：程序完全按照代码序列的顺序执行</li>
+<li>异步：程序的事件需要有系统事件来驱动。常见的系统事件包括中断、信号等。</li>
+</ul>
 ]]></content>
       <categories>
         <category>网络编程</category>

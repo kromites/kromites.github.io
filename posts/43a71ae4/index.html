@@ -131,12 +131,12 @@
 <meta property="og:description" content="索引（在MySQL中也叫作键（key））是存储引擎用于快速找到记录的一种数据结构。这是索引的基本功能，除此之外，索引其他一些方面有用的属性也会在本篇文章中讲到。">
 <meta property="og:locale">
 <meta property="og:image" content="http://kromites.github.io/posts/43a71ae4/Users/16258/Desktop/hexo/source_posts/MySQL索引/B树介绍.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png">
-<meta property="og:image" content="http://kromites.github.io/posts/undefined/%E5%8C%BA%E5%88%AB.png">
+<meta property="og:image" content="http://kromites.github.io/posts/43a71ae4/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png">
+<meta property="og:image" content="http://kromites.github.io/posts/43a71ae4/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png">
+<meta property="og:image" content="http://kromites.github.io/posts/43a71ae4/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png">
+<meta property="og:image" content="http://kromites.github.io/posts/43a71ae4/%E5%8C%BA%E5%88%AB.png">
 <meta property="article:published_time" content="2021-07-26T07:21:00.000Z">
-<meta property="article:modified_time" content="2021-07-26T13:39:41.135Z">
+<meta property="article:modified_time" content="2021-07-26T13:39:57.978Z">
 <meta property="article:author" content="Kromite">
 <meta property="article:tag" content="MySQL">
 <meta property="article:tag" content="索引">
@@ -495,18 +495,18 @@
 <h4 id="B-Tree索引"><a href="#B-Tree索引" class="headerlink" title="B-Tree索引"></a>B-Tree索引</h4><p>​    这个是索引的主要类型。底层为B+树数据结构。</p>
 <h5 id="B-树结构"><a href="#B-树结构" class="headerlink" title="B+树结构"></a><strong>B+树结构</strong></h5><p>​    首先我们来简单介绍下B+树</p>
 <p><img src="/posts/43a71ae4/Users\16258\Desktop\hexo\source_posts\MySQL索引\B树介绍.png" alt="image-20210726163709331"></p>
-<img src="/posts/undefined/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png" class title="B+树介绍">
+<img src="/posts/43a71ae4/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png" class title="B+树介绍">
 
 <p>​    不过B+树的插入和删除操作会导致其结构发生变化，但是永远会保持平衡，而且根节点到叶子节点的距离永远相同。<strong>这样为了保持平衡对于新插入的键值可能需要做大量的拆分页操作</strong>。因为B+树结构主要用于磁盘，页的拆分意味着磁盘的操作，所以应该在可能的情况下减少页的拆分，因此B+树也有类似于AVL树的旋转操作，以减少页拆分的次数。</p>
 <p><strong>从上可以看出B+树存储的所有的值都是按顺序存储的，并且每一个叶子页到根的距离相同。</strong></p>
 <p>B+树索引的本质就是B+树在数据库中的实现。一般数据库中的实现的B树都是2<del>4层，这样一来具有<strong>高扇出性</strong>，查找某一键值的行记录最多只需要2</del>4次。对于一般机械键盘也只需0.02~0.04s。</p>
 <h5 id="聚簇索引和非聚簇索引"><a href="#聚簇索引和非聚簇索引" class="headerlink" title="聚簇索引和非聚簇索引"></a><strong>聚簇索引和非聚簇索引</strong></h5><p>​    B+树索引可以分为<strong>聚簇索引和非聚簇索引</strong>，不管是聚集索引还是辅助索引，内部都是B+树，即高度平衡的，叶子节点存放所有的数据。但是二者有着以下的差别</p>
 <p>​    B+树是左小右大的顺序存储结构，节点只包含id索引列，而叶子节点包含索引列和数据，<strong>这种数据和索引在一起存储的索引方式叫做聚簇索引</strong>，<strong>一张表只能有一个聚簇索引。假设没有定义主键，InnoDB会选择一个唯一的非空索引代替，如果没有的话则会隐式定义一个主键作为聚簇索引</strong>。</p>
-<p>​    <img src="/posts/undefined/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="聚簇索引"></p>
+<p>​    <img src="/posts/43a71ae4/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="聚簇索引"></p>
 <p>​    上图主键聚簇索引存储的结构，那么非聚簇索引的结构是什么样子呢？<strong>非聚簇索引(二级索引)叶子节点保存的不是数据，而是主键id值</strong>，这一点和myisam保存的是数据地址是不同的。 <strong>非聚簇索引通过先查询到该数据的主键id值后，再通过主键id值去查找该表中唯一的聚簇索引，通过聚簇索引得到真正的数据</strong>，这个也是被称作二级索引的原因， 因为它查完还得查聚簇。</p>
-<p>​    <img src="/posts/undefined/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="非聚簇索引"></p>
+<p>​    <img src="/posts/43a71ae4/%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.png" class title="非聚簇索引"></p>
 <p>​    最终，我们一张图可以看看InnoDB和Myisam聚簇和非聚簇索引的区别</p>
-<p>​    <img src="/posts/undefined/%E5%8C%BA%E5%88%AB.png" class title="区别"></p>
+<p>​    <img src="/posts/43a71ae4/%E5%8C%BA%E5%88%AB.png" class title="区别"></p>
 <p>​    <strong>上图可以看出InnoDB的叶子扇区存放的整行数据，而MyISAM存放的是指向行数据的指针。</strong></p>
 <h5 id="二者的优缺点"><a href="#二者的优缺点" class="headerlink" title="二者的优缺点"></a><strong>二者的优缺点</strong></h5><p>​    <strong>聚簇索引的优点在于对于使用主键的排序查找和范围查找速度非常快，因为叶子节点的数据就是用户徐亚查询所要的数据。</strong></p>
 <p>​    范围查找是因为可以通过叶子节点的上层中间节点得到页的范围，之后直接读取数据页即可。</p>
@@ -702,6 +702,10 @@
 
           <div class="post-nav-prev post-nav-item">
             
+              <a href="/posts/42812f47/" rel="prev" title="MySQL查询性能优化">
+                MySQL查询性能优化 <i class="fa fa-chevron-right"></i>
+              </a>
+            
           </div>
         </div>
       
@@ -784,7 +788,7 @@
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">39</span>
+                  <span class="site-state-item-count">40</span>
                   <span class="site-state-item-name">日志</span>
                 </a>
               </div>
@@ -806,7 +810,7 @@
               
               <div class="site-state-item site-state-tags">
                 <a href="/tags/index.html">
-                  <span class="site-state-item-count">66</span>
+                  <span class="site-state-item-count">68</span>
                   <span class="site-state-item-name">标签</span>
                 </a>
               </div>
@@ -846,6 +850,10 @@
                 
                 
                   <li class="recent_posts_li">
+                    <a href="/posts/42812f47/" title="MySQL查询性能优化" target="_blank">MySQL查询性能优化</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
                     <a href="/posts/43a71ae4/" title="MySQL索引" target="_blank">MySQL索引</a>
                   </li>
                 
@@ -859,10 +867,6 @@
                 
                   <li class="recent_posts_li">
                     <a href="/posts/26ac1f1c/" title="Schema与数据类型优化" target="_blank">Schema与数据类型优化</a>
-                  </li>
-                
-                  <li class="recent_posts_li">
-                    <a href="/posts/f91535f/" title="MySQL架构" target="_blank">MySQL架构</a>
                   </li>
                 
               </ul>
@@ -925,7 +929,7 @@
     
       <span class="post-meta-item-text">Site words total count&#58;</span>
     
-    <span title="Site words total count">113.7k</span>
+    <span title="Site words total count">119.5k</span>
   
 </div>
 <!--
