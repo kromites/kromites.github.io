@@ -28,6 +28,86 @@
       </tags>
   </entry>
   <entry>
+    <title>MySQL高级特性</title>
+    <url>/posts/c13ffb72/</url>
+    <content><![CDATA[<blockquote>
+<p>针对高性能MySQL，前三篇的Schema设计，索引设计和查询优化是基础，这一章算是提升项，高级特性在三大基础上能够更好的优化应用性能。</p>
+<p>由于自己缺乏足够的项目经验，因此本章知识可能理解得不够， 希望之后有了相关项目，深入理解了MySQL的相关知识，回头再看这篇文章会有新的领悟和补充。</p>
+</blockquote>
+<span id="more"></span>
+
+<p>MySQL从5.0和5.1版本之后开始引入了很多高级特性，例如分区、触发器等，本章就来简单介绍下。</p>
+<h3 id="分区表"><a href="#分区表" class="headerlink" title="分区表"></a>分区表</h3><h4 id="概念"><a href="#概念" class="headerlink" title="概念"></a>概念</h4><p>​    对于用户来说，<strong>分区表是一个独立的逻辑表，但是底层有多个物理子表组成。实现分区的代码实际上是对一组底层表的句柄对象的封装。对分区表的请求，都会通过句柄对象转化成对存储引擎的接口调用。</strong></p>
+<p>​    因此分区对于SQL层来说就是一个装有底层实现的黑盒子，对应用层来说是透明的。</p>
+<p>​    MySQL是通过对底层表的封装实现的分区表，这意味着<strong>索引也是按照分区的子表定义的，而没有全局索引。</strong></p>
+<p>​    MySQL在创建表是使用<code>PARTITION BY</code>子句定义每个分区存放的数据。在执行查询的时候，优化器会根据分区定义过滤那些没有我们需要数据的分区，这样查询就无须扫描所有分区，而只需要查找包含需要数据的分区即可。</p>
+<p>​    <strong>分区的一个主要目的是将数据按照一个较粗的粒度分在不同的表，这样做可以将相关的数据存放在一起，另外，如果想一次批量删除真个enquiry的数据也会变得很方便。</strong></p>
+<p>​    分区一般应用于以下场景：</p>
+<ul>
+<li>表非常大以至于无法全部都放在内存中，或者之在表的最后部分有热点数据，其他均是历史数据。</li>
+<li>分区表的数据更容易维护。想批量删除大量数据可以使用清除整个分区的方式。另外还可以对一个独立分区进行优化、检查、修复等操作。</li>
+<li>分区表的数据可以分布在不同的物理设备上，从而能够高效利用多个设备。</li>
+<li>如果需要的话，独立分区可以备份和恢复，这在非常大的数据集的场景下效果非常好。</li>
+</ul>
+<p>​    分区表本身的限制</p>
+<ul>
+<li>一个表最多只能有1024个分区。</li>
+<li><strong>如果分区字段中有主键或者唯一索引的列，那么所有主键列和唯一索引都必须包含进来。</strong></li>
+<li>分区表中无法使用外键约束。</li>
+</ul>
+<h4 id="分区表的原理"><a href="#分区表的原理" class="headerlink" title="分区表的原理"></a>分区表的原理</h4><p>​    如前所述，分区表由多个底层表实现，这些底层表也是由句柄表表示，所以我们也可以直接访问各个分区。存储引擎管理分区的各个底层表和管理普通表一样（所有底层表都必须使用相同的存储引擎），<strong>分区表的索引只是在各个底层表上各自加上一个完全相同的索引</strong>。从存储引擎的角度来看，普通表和底层表并无差别，存储引擎也无须中断这是一个底层表还是普通表。</p>
+<p>​    分区表操作逻辑如下：</p>
+<ul>
+<li>select操作：<strong>查询一个分区表时，分区层先打开并锁住所有底层表，优化器先判断是否可以过滤部分分区</strong>，然后再调用对应的存储引擎接口访问各个分区的数据。</li>
+<li>insert操作：当写入一条记录时，分区层先打开并锁住所有底层表，确定哪个分区接收这条记录，再将记录写入对应底层表。</li>
+<li>delete操作：当删除一条记录时，分区层先打开并锁住所有底层表，确定数据对应的分区，最后对相应底层进行删除操作。</li>
+<li>update操作：当更新一条记录时，分区层先打开并锁住所有底层表，MySQL先确定需要更新的记录在哪个分区，然后取出数据并更新，在判断更新后的数据应该存放哪个分区，最后对底层表进行写入操作，并对原数据所在的底层进行写入操作，并对原数据所在的底层表进行删除操作。</li>
+</ul>
+<p>总结一下上面的操作逻辑，<strong>这些操作都是能够过滤的，如果定位到了指定分区，其他分区的信息可以不查，这样也提高了查询效率。</strong></p>
+<p><strong>每个操作都会先打开并锁住所有底层表，但这并不是说分区过程中会锁定全表。如果存储引擎能够自己实现行级锁，例如InnoDB，则会在分区层释放表锁。这个加锁过程和普通InnoDB上的查询一样。</strong></p>
+<h4 id="分区表的类型"><a href="#分区表的类型" class="headerlink" title="分区表的类型"></a>分区表的类型</h4><p>​    MySQL支持多种分区表。我们看到的是根据范围进行分区，每个分区存储落在某个范围的记录，分区表达式可以使列，也可以是包含列的表达式。一般这种分区叫做<strong>RANGE分区：基于属于一个给定连续区间的列值，把多行分配给分区。</strong></p>
+<p><strong>RANGE分区也叫水平分区</strong>：这种形式分区是对表的行进行分区，通过这样的方式不同分组里面的物理列分割的数据集得以组合，从而进行个体分割（单分区）或集体分割（1个或多个分区）。所有在表中定义的列在每个数据集中都能找到，</p>
+<p><strong>所以表的特性依然得以保持。</strong></p>
+<p>例如，下表就可以将每一年的销售额存放在不同的分区里：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">CREATE TABLE sales(</span><br><span class="line">	order_date DATETIME NOT NULL, </span><br><span class="line">	-- Other columns omitted</span><br><span class="line">)ENGINE = INNODB PARTITION BY RANGE(YEAR(order, date))(</span><br><span class="line">	PARTITION p_2010 VALUES LESS THAN (2010),</span><br><span class="line">    PARTITION p_2011 VALUES LESS THAN (2011),</span><br><span class="line">	PARTITION p_2012 VALUES LESS THAN (2012),</span><br><span class="line">    PARTITION p_catchall VALUES LESS THAN MAXVALUE,</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<p>​    其他分区手段一般是支持列表，键值或者哈希分区。</p>
+<p><strong>LIST分区</strong>是基于列值匹配一个离散值集合中的某个值来进行选择。<code>PARTITION BY LIST(expr)</code>，这是按照列分区，这种分区方式一般来说是通过对表的垂直划分来减少目标表的宽度，使某些特定的列被划分到特定的分区，每个分区都包含了其中的列所对应的行。</p>
+<p>举个简单例子：<strong>一个包含了大text和BLOB列的表，这些text和BLOB列又不经常被访问，这时候就要把这些不经常使用的text和BLOB了划分到另一个分区，在保证它们数据相关性的同时还能提高访问速度。</strong></p>
+<h4 id="如何使用分区表"><a href="#如何使用分区表" class="headerlink" title="如何使用分区表"></a>如何使用分区表</h4><p>​    一般来说分区表是在非常大的数据表中使用的（如果数据很少，直接全表扫描；如果数据相对多，那么建立索引是一个好方法，数据非常大，索引的维护和空间消耗也是很大的，这是因为B+树对于大数据无法起作用，会产生大量随机I/O）。</p>
+<p>​    <strong>分区就是一个更粗粒度的但消耗更少的方式去检索数据，例如在大量数据上之以非常小代价就定位到正确的小区域。</strong>而分区因为精确性不高，因此也无须像索引一样使用数据结构，因为无需精确定位每条数据的位置。</p>
+<p>​    一般来说使用分区表的方法有下面两种。</p>
+<ul>
+<li><p><strong>全量扫描数据，不要任何索引</strong>：可以使用简单的分区方式存放表，不要任何索引，根据分区的规则大致定位需要的数据位置。只要能够使用where条件，将需要的数据限制在少数分区中，效率很高。但是使用该策略没有缓存效应，<strong>只适用于以正常的方式访问大量数据的时候</strong>。而且分区数量不能太大，因为没有索引，分区数量大的话效率会降低。</p>
+</li>
+<li><p><strong>索引数据，并分离热点</strong>：如果数据有明显的“热点”，而且除了这部分数据，其他数据很少被访问到，<strong>那么可以将这部分热点数据单独放在一个分区中，让这个分区的数据能够有机会都缓存在内存中。在热点分区还能够使用索引来加快速度。</strong></p>
+</li>
+</ul>
+<h4 id="查询优化"><a href="#查询优化" class="headerlink" title="查询优化"></a>查询优化</h4><p>​    引入分区给查询优化带来了一些新的思路。<strong>分区最大的优点就是优化器可以根据分区函数来过滤一些分区，根据粗粒度索引的优势，通过分区过滤通常可以让查询扫描更少的数据。</strong></p>
+<p>​    <strong>因此在访问分区表时，很重要一点是要在WHERE条件中带入分区列，有时候即使看似多余的也要带上，这样就可以让优化器能够过滤掉无需访问的分区。</strong></p>
+<p>最后分区表的子表都是被MySQL隐藏的，不能单独去访问，只能通过分区来访问。</p>
+<h3 id="视图"><a href="#视图" class="headerlink" title="视图"></a>视图</h3><p>​    （视图基本没用过，现在只是写下简单的书本知识）</p>
+<p>​    <strong>视图本身是一个虚拟表，不存放任何数据。它返回的数据是MySQL从其他表中生成的。视图和表是在同一个命名空间，大部分情况下都能同等看待，但是视图不能使用触发器，也不能使用DROP TABLE命令删除视图。</strong></p>
+<p>视图创建方式</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">create view Oceania AS</span><br><span class="line">	select * from Country WHERE Continet = &#x27;Oceania&#x27;</span><br><span class="line">	with check option;</span><br></pre></td></tr></table></figure>
+
+<p>​    <strong>视图有一种叫做可更新视图，这种视图是指可以通过更新这个视图来更新视图设计的相关表。</strong></p>
+<h3 id="外键约束"><a href="#外键约束" class="headerlink" title="外键约束"></a>外键约束</h3><p>​    InnoDB是MySQL中唯一支持外键的内置存储引擎。<strong>使用外键是有成本的。比如外键通常都要求每次在修改数据时都在另外一张表中多执行一次查找操作。</strong></p>
+<p>而且外键约束需要访问额外的表，这意味着需要额外的锁。这种在我们意料之外的锁可能会造成死锁，因此一般来说都是尽可能用其他手段代替外键。比如触发器等。</p>
+<h3 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h3><p>​    本章主要是讲了讲分区表，附带介绍了下视图和外键约束的基本概念。如果之后对于MySQL更熟悉的话，可能会新记录一些有用的特性。</p>
+<h3 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h3><ul>
+<li>《高性能MySQL》</li>
+</ul>
+]]></content>
+      <categories>
+        <category>MySQL</category>
+      </categories>
+      <tags>
+        <tag>MySQL</tag>
+        <tag>高级特性</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>MySQL查询性能优化</title>
     <url>/posts/42812f47/</url>
     <content><![CDATA[<blockquote>
@@ -112,7 +192,7 @@
 </ul>
 <h3 id="查询执行的基础"><a href="#查询执行的基础" class="headerlink" title="查询执行的基础"></a>查询执行的基础</h3><p>​    当希望MySQL能够以更高的性能运行查询时，最好的办法就是弄清楚MySQL是如何优化和执行查询的。</p>
 <p>下图就是查询执行路径</p>
-<img src="/posts/undefined/%E6%9F%A5%E8%AF%A2%E6%89%A7%E8%A1%8C%E8%B7%AF%E5%BE%84.jpg" class title="查询执行路径">
+<img src="/posts/42812f47/%E6%9F%A5%E8%AF%A2%E6%89%A7%E8%A1%8C%E8%B7%AF%E5%BE%84.jpg" class title="查询执行路径">
 
 <ol>
 <li>客户端发送一条查询给服务器。</li>
