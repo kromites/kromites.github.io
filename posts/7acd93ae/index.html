@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+    
+      
+    
+
+    
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic|Robota Slab:300,300italic,400,400italic,700,700italic|Lobster Two:300,300italic,400,400italic,700,700italic|PT Mono:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css" />
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="多线程日志,WebServer," />
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="本篇文章剖析一下WebServer项目中所做的日志库。主要集中点在为什么，做了什么，效果如何这三个问题上。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="项目多线程日志">
+<meta property="og:url" content="http://kromites.github.io/posts/7acd93ae/index.html">
+<meta property="og:site_name" content="Kromite">
+<meta property="og:description" content="本篇文章剖析一下WebServer项目中所做的日志库。主要集中点在为什么，做了什么，效果如何这三个问题上。">
+<meta property="og:locale">
+<meta property="article:published_time" content="2021-07-30T08:32:37.000Z">
+<meta property="article:modified_time" content="2021-07-30T11:41:57.332Z">
+<meta property="article:author" content="Kromite">
+<meta property="article:tag" content="多线程日志">
+<meta property="article:tag" content="WebServer">
+<meta name="twitter:card" content="summary">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '',
+    scheme: 'Mist',
+    version: '5.1.4',
+    sidebar: {"position":"right","display":"post","offset":12,"b2t":false,"scrollpercent":true,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://kromites.github.io/posts/7acd93ae/"/>
+
+
+
+
+
+  <title>项目多线程日志 | Kromite</title>
+  
+
+
+
+
+
+
+
+
+<meta name="generator" content="Hexo 5.4.0"></head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-right page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Kromite</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">Record bit by bit</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocomplete="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://kromites.github.io/posts/7acd93ae/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Kromite">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">项目多线程日志</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+          
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-30T16:32:37+08:00">
+                2021-07-30
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/WebServer/" itemprop="url" rel="index">
+                    <span itemprop="name">WebServer</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/posts/7acd93ae/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/posts/7acd93ae/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+            <div class="post-wordcount">
+              
+                
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-file-word-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">字数统计&#58;</span>
+                
+                <span title="字数统计">
+                  2k
+                </span>
+              
+
+              
+                <span class="post-meta-divider">|</span>
+              
+
+              
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-clock-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">阅读时长 &asymp;</span>
+                
+                <span title="阅读时长">
+                  6
+                </span>
+              
+            </div>
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <blockquote>
+<p>本篇文章剖析一下WebServer项目中所做的日志库。主要集中点在为什么，做了什么，效果如何这三个问题上。</p>
+</blockquote>
+<span id="more"></span>
+
+<h3 id="Why"><a href="#Why" class="headerlink" title="Why"></a>Why</h3><h4 id="为什么做日志库"><a href="#为什么做日志库" class="headerlink" title="为什么做日志库"></a>为什么做日志库</h4><p>​    做日志库的原因如下：</p>
+<ul>
+<li><strong>故障诊断和追踪</strong>：如果一个项目中有一个完善的日志库，那么在开发和运维中都能够准确高效的找到问题所在。本人写该项目时基本上将日志库代替了断点功能，能够清晰的定位到项目在哪个文件的具体行数出现问题，导致Bug的产生。</li>
+<li><strong>性能原因</strong>：如果仅仅是故障诊断和追踪的话，那么使用<code>iostream</code>就可以了，但是处于性能的考虑，还是自己实现并优化。</li>
+</ul>
+<h4 id="为什么要线程安全"><a href="#为什么要线程安全" class="headerlink" title="为什么要线程安全"></a>为什么要线程安全</h4><ul>
+<li>该项目是多线程的，如果线程不安全的话，那么只能<strong>每个线程的单独写一个文件</strong>，这样不仅性能差，而且会造成线程阻塞在写磁盘操作上。</li>
+</ul>
+<p>综上可知道为什么要做多线程日志库，下面来讲述下其功能需要什么。</p>
+<h3 id="WHAT"><a href="#WHAT" class="headerlink" title="WHAT"></a>WHAT</h3><h4 id="多线程日志库需要什么功能"><a href="#多线程日志库需要什么功能" class="headerlink" title="多线程日志库需要什么功能"></a>多线程日志库需要什么功能</h4><ul>
+<li><p>输出日志基本信息：日志级别 + 时间戳 + 线程号 + 文件名 + 日志语句所在行数等。</p>
+</li>
+<li><p>设置日志级别，运行时可过滤日志，输出日志级别高于语句日志级别时，<strong>既不输出，也要无开销</strong></p>
+</li>
+<li><p>在多线程中不阻塞，且不造成争用，线程安全。</p>
+</li>
+<li><p>磁盘写入的性能得高效</p>
+</li>
+</ul>
+<p>综上可知道多线程日志库需要的功能，下面讲述下这些功能如何实现</p>
+<h3 id="HOW"><a href="#HOW" class="headerlink" title="HOW"></a>HOW</h3><h4 id="日志基本信息"><a href="#日志基本信息" class="headerlink" title="日志基本信息"></a>日志基本信息</h4><p>时间戳：</p>
+<ul>
+<li><p>通过<code>gettimeofday()</code>来获取当前时间，因为<strong>该函数不是系统调用</strong>，提高获取时间的性能，且能够精确到微秒。</p>
+</li>
+<li><p>缓存时间戳字符串，在一秒之内的多条日志只需重新格式化微秒部分，提高<strong>格式化的性能</strong>。</p>
+</li>
+</ul>
+<p>其他日志信息</p>
+<ul>
+<li>利用内置函数提前格式化缓存好。</li>
+</ul>
+<h4 id="日志级别与过滤"><a href="#日志级别与过滤" class="headerlink" title="日志级别与过滤"></a>日志级别与过滤</h4><p>日志级别</p>
+<ul>
+<li><p>设置不同级别，打印时日志信息不同。</p>
+</li>
+<li><p>针对特殊级别，需要有不同的行为（如FATAL中会打印并abort）。</p>
+</li>
+<li><p>写项目中<strong>规范级别的使用</strong>！</p>
+</li>
+</ul>
+<p>过滤</p>
+<ul>
+<li>直接使用if语句，来过滤低级别日志信息。<strong>性能消耗仅仅是一次判断，而无磁盘消耗。</strong></li>
+</ul>
+<h4 id="多线程不阻塞，且线程安全"><a href="#多线程不阻塞，且线程安全" class="headerlink" title="多线程不阻塞，且线程安全"></a>多线程不阻塞，且线程安全</h4><p>采用<strong>异步日志（非阻塞日志）</strong>：<strong>用一个日志线程负责收集日志信息，并写入日志文件。 其它工作线程只管往该日志线程发送日志消息。</strong></p>
+<p>具体实现：</p>
+<ol>
+<li>其它线程跨线程写入日志线程的缓冲区</li>
+<li>工作线程将缓冲区的内容flush到指定文件中</li>
+</ol>
+<p>这样就实现了<strong>线程安全且输出至单个文件的多线程日志</strong>，<strong>只需要保证步骤1的线程安全即可</strong>。</p>
+<ul>
+<li><p>输入方：其他工作线程</p>
+</li>
+<li><p>输出方：日志线程</p>
+</li>
+</ul>
+<h4 id="磁盘写入的性能"><a href="#磁盘写入的性能" class="headerlink" title="磁盘写入的性能"></a>磁盘写入的性能</h4><p>上面的方法已经能够保证该日志是线程安全的，但是依旧可以思考一下，步骤一写入日志线程的缓冲区之后该怎么办？缓冲区又该如何设置呢？</p>
+<ul>
+<li>最常见的，缓冲区有数据就flush，那么该缓冲区就反复在被其他线程输入和磁盘输出之间。众所周知，<strong>前者是内存操作，速度是快于磁盘操作的</strong>（两个操作都需要加锁）。</li>
+</ul>
+<p>上面的方法性能很低，低在两方面，一是<strong>磁盘操作过于频繁，而是加锁的频繁度</strong>。</p>
+<p>这里就展现出了一种方法，<strong>双缓存技术</strong></p>
+<ul>
+<li>缓冲区不止一块，多块进行轮流操作</li>
+<li>缓冲区分前后端，前端是将日志信息输入到bufferA中，后端是将bufferB信息写入磁盘中。由于缓冲区有多块，带来了以下的优点：<ul>
+<li>前后端都涉及到锁，但不是对同一缓冲区进行加锁，这样提高了性能。</li>
+<li>前端是内存操作，速度快，缓冲区容量大，这样能够使得日志库的吞吐量高；</li>
+<li>后端是磁盘操作，不过其相当于<strong>批处理</strong>一整块数据，不用频繁调用磁盘操作，也减少了线程唤醒的频度，降低开销。这样使得日志库写入文件速度加快。</li>
+</ul>
+</li>
+</ul>
+<p>综上，这就是该日志库的功能实现的描述，主要聚焦于<strong>如何日志库线程安全和吞吐量，写入文件速度都快</strong>！</p>
+<p>最后针对功能的实现，能够做到日志连续输出的间隔时间只在10微秒左右。</p>
+<h3 id="PROBLEM"><a href="#PROBLEM" class="headerlink" title="PROBLEM"></a>PROBLEM</h3><p>在经历过WHY、WHAT、HOW之后，对整个日志库已经有了完整的了解。但是这里依然有一些问题。</p>
+<ul>
+<li><p>双缓冲技术如何调整flush的频率？</p>
+<p>使用两种方法调整</p>
+<ul>
+<li>基于定时器的时间调整（如每3sflush一次）</li>
+<li>基于write次数的调整（如每写入1000条flush一次）</li>
+</ul>
+<p>自己的项目中，对于时间事件描绘不多，使用的是基于写入次数的调整。</p>
+</li>
+<li><p>如果后端写入速度太快，缓冲区满了怎么办？</p>
+<ul>
+<li>有备用的缓冲区，双缓冲技术只是分割了前后端，前后端可以分别有多个缓冲区。</li>
+</ul>
+</li>
+<li><p>如果陷入死锁的话，缓冲区堆积怎么办？</p>
+<ul>
+<li>死锁，缓冲区数量到达一定数量，那么直接丢弃缓冲区数据。</li>
+</ul>
+</li>
+<li><p>如果服务器宕机或者abort了怎么办，最后的日志数据可能会丢失，这该怎么办？</p>
+<ul>
+<li>针对abort的情况下，在此之前先flush文件，然后再abort。</li>
+<li>针对服务器突然宕机，那么只能在core dump文件中查找cookie了（但是，这个基本没用到过）</li>
+</ul>
+</li>
+</ul>
+<h3 id="THINK"><a href="#THINK" class="headerlink" title="THINK"></a>THINK</h3><ul>
+<li><p>针对一个日志相类似的东西，要想保证其线程安全性，可以学习该思路，分前后端，使得其他线程都输出到日志专用线程，然后日志专用线程专心去写入文件中。这里的好处是：</p>
+<ul>
+<li><p>工作职能清晰化，有专门的日志线程。</p>
+</li>
+<li><p>工作效率高，资源不浪费，如果每个线程都对直接对文件操作，会引起线程争用。</p>
+</li>
+<li><p>加锁明确，临界区小。加锁区域只是在工作线程输入到日志线程中的缓冲区中。</p>
+</li>
+</ul>
+</li>
+<li><p>如何利用好双缓冲技术？它的使用场景有什么？</p>
+<p>首先要明白双缓冲技术的场景：输入端内存操作，输出端磁盘操作，两端速度不匹配。</p>
+<ul>
+<li>如果是按照1：1来处理，那么性能会被磁盘操作所拖累。</li>
+<li>因此这里借助了一个概念：<strong>批处理</strong>。输入端快速，那么先用缓冲区存储快速的结果，一批批地将数据进行磁盘操作，这样可以达到n:1，提升效率。</li>
+<li>而且前后端分离，也会让缓冲区的只能更清晰，对加锁也更方便，不然输入和输出都对一个缓冲区进行加锁可能会出问题。</li>
+</ul>
+<p>这样的我们可以思考，只要是输入输出速度不匹配都可以用此方法，在该项目中就有一种相似的思想:</p>
+<ul>
+<li>如果用户在当前IO线程调用<code>EventLoop::runInLoop(callback_)</code>，回调会同步进行；</li>
+<li>如果用户在其他线程调用该函数，<code>callback_</code>会被加入到队列中，该IO线程唤醒之后来调用这个回调函数。</li>
+</ul>
+<p>这样也是一种缓冲机制，通过队列的思想，来减少该IO线程的唤醒次数。如果是每次都唤醒的话，那样就太不高效了。</p>
+</li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+  <div>
+    
+      <div>
+    
+        <div style="text-align:center;color: #ccc;font-size:14px;">-------------本文结束<i class="fa fa-paw"></i>感谢您的阅读-------------</div>
+    
+</div>
+
+    
+  </div>
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%97%A5%E5%BF%97/" rel="tag"><i class="fa fa-tag"></i> 多线程日志</a>
+          
+            <a href="/tags/WebServer/" rel="tag"><i class="fa fa-tag"></i> WebServer</a>
+          
+        </div>
+      
+
+      
+      
+        <div class="post-widgets">
+        
+
+        
+
+        
+          
+          <div id="needsharebutton-postbottom">
+            <span class="btn">
+              <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </span>
+          </div>
+        
+        </div>
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/posts/c13ffb72/" rel="next" title="MySQL高级特性">
+                <i class="fa fa-chevron-left"></i> MySQL高级特性
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+    <div class="comments" id="comments">
+    </div>
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <img class="site-author-image" itemprop="image"
+                src="/images/avatar.gif"
+                alt="" />
+            
+              <p class="site-author-name" itemprop="name"></p>
+              <p class="site-description motion-element" itemprop="description"></p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">42</span>
+                  <span class="site-state-item-name">日志</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-categories">
+                <a href="/categories/index.html">
+                  <span class="site-state-item-count">10</span>
+                  <span class="site-state-item-name">分类</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                <a href="/tags/index.html">
+                  <span class="site-state-item-count">71</span>
+                  <span class="site-state-item-name">标签</span>
+                </a>
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+            <div class="links-of-author motion-element">
+                
+                  <span class="links-of-author-item">
+                    <a href="https://github.com/kromites" target="_blank" title="GitHub">
+                      
+                        <i class="fa fa-fw fa-github"></i>GitHub</a>
+                  </span>
+                
+                  <span class="links-of-author-item">
+                    <a href="mailto:chouwu9@gmail.com" target="_blank" title="E-Mail">
+                      
+                        <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+                  </span>
+                
+            </div>
+          
+
+          
+          
+            <div class="links-of-blogroll motion-element links-of-blogroll-block">
+              <div class="links-of-blogroll-title">
+                <!-- modify icon to fire by szw -->
+                <i class="fa fa-history fa-" aria-hidden="true"></i>
+                近期文章
+              </div>
+              <ul class="links-of-blogroll-list">
+                
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/7acd93ae/" title="项目多线程日志" target="_blank">项目多线程日志</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/c13ffb72/" title="MySQL高级特性" target="_blank">MySQL高级特性</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/42812f47/" title="MySQL查询性能优化" target="_blank">MySQL查询性能优化</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/43a71ae4/" title="MySQL索引" target="_blank">MySQL索引</a>
+                  </li>
+                
+                  <li class="recent_posts_li">
+                    <a href="/posts/49316947/" title="I/O模型" target="_blank">I/O模型</a>
+                  </li>
+                
+              </ul>
+            </div>
+          
+
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#Why"><span class="nav-number">1.</span> <span class="nav-text">Why</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%81%9A%E6%97%A5%E5%BF%97%E5%BA%93"><span class="nav-number">1.1.</span> <span class="nav-text">为什么做日志库</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8"><span class="nav-number">1.2.</span> <span class="nav-text">为什么要线程安全</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#WHAT"><span class="nav-number">2.</span> <span class="nav-text">WHAT</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%97%A5%E5%BF%97%E5%BA%93%E9%9C%80%E8%A6%81%E4%BB%80%E4%B9%88%E5%8A%9F%E8%83%BD"><span class="nav-number">2.1.</span> <span class="nav-text">多线程日志库需要什么功能</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#HOW"><span class="nav-number">3.</span> <span class="nav-text">HOW</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%97%A5%E5%BF%97%E5%9F%BA%E6%9C%AC%E4%BF%A1%E6%81%AF"><span class="nav-number">3.1.</span> <span class="nav-text">日志基本信息</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%97%A5%E5%BF%97%E7%BA%A7%E5%88%AB%E4%B8%8E%E8%BF%87%E6%BB%A4"><span class="nav-number">3.2.</span> <span class="nav-text">日志级别与过滤</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%A4%9A%E7%BA%BF%E7%A8%8B%E4%B8%8D%E9%98%BB%E5%A1%9E%EF%BC%8C%E4%B8%94%E7%BA%BF%E7%A8%8B%E5%AE%89%E5%85%A8"><span class="nav-number">3.3.</span> <span class="nav-text">多线程不阻塞，且线程安全</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E7%A3%81%E7%9B%98%E5%86%99%E5%85%A5%E7%9A%84%E6%80%A7%E8%83%BD"><span class="nav-number">3.4.</span> <span class="nav-text">磁盘写入的性能</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#PROBLEM"><span class="nav-number">4.</span> <span class="nav-text">PROBLEM</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#THINK"><span class="nav-number">5.</span> <span class="nav-text">THINK</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">kromite</span>
+
+  
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-area-chart"></i>
+    </span>
+    
+      <span class="post-meta-item-text">Site words total count&#58;</span>
+    
+    <span title="Site words total count">124.9k</span>
+  
+</div>
+<!--
+
+  <div class="powered-by">由 <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a> 强力驱动</div>
+
+
+
+
+
+
+-->
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+          <span id="scrollpercent"><span>0</span>%</span>
+        
+      </div>
+    
+
+    
+      <div id="needsharebutton-float">
+        <span class="btn">
+          <i class="fa fa-share-alt" aria-hidden="true"></i>
+        </span>
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/canvas-nest/canvas-nest.min.js"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  <script src="//cdn1.lncld.net/static/js/3.0.4/av-min.js"></script>
+  <script src="/js/src/Valine.min.js"></script>
+  
+  <script type="text/javascript">
+    new Valine({
+        lang: 'zh-cn',
+        admin_email:'480133937@qq.com', //填写博主邮箱 
+        el: '#comments' ,
+        appId: '13aTGA3gDu8Gibktc3NPEo53-gzGzoHsz',
+        appKey: '7IKWdcFuKxDvzojhVxVwYJtG',
+        emoticon_url: 'https://cloud.panjunwen.com/alu',
+        emoticon_list: ["狂汗.png","不说话.png","汗.png","坐等.png","献花.png","不高兴.png","中刀.png","害羞.png","皱眉.png","小眼睛.png","暗地观察.png"],
+        placeholder: 'Please comment here',
+  });
+  </script>
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    var isXml = true;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    } else if (/json$/i.test(search_path)) {
+      isXml = false;
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      var $localSearchInput = $('#local-search-input');
+      $localSearchInput.attr("autocapitalize", "none");
+      $localSearchInput.attr("autocorrect", "off");
+      $localSearchInput.focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+
+      // start loading animation
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay">' +
+          '<div id="search-loading-icon">' +
+          '<i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>' +
+          '</div>' +
+          '</div>')
+        .css('overflow', 'hidden');
+      $("#search-loading-icon").css('margin', '20% auto 0 auto').css('text-align', 'center');
+
+      $.ajax({
+        url: path,
+        dataType: isXml ? "xml" : "json",
+        async: true,
+        success: function(res) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = isXml ? $("entry", res).map(function() {
+            return {
+              title: $("title", this).text(),
+              content: $("content",this).text(),
+              url: $("url" , this).text()
+            };
+          }).get() : res;
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+
+          // remove loading animation
+          $(".local-search-pop-overlay").remove();
+          $('body').css('overflow', '');
+
+          proceedsearch();
+        }
+      });
+    }
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+  
+    
+  
+  <link rel="stylesheet" href="">
+
+  
+  
+  <script src="/lib/needsharebutton/needsharebutton.js"></script>
+
+  <script>
+    
+      pbOptions = {};
+      
+          pbOptions.iconStyle = "default";
+      
+          pbOptions.boxForm = "horizontal";
+      
+          pbOptions.position = "bottomCenter";
+      
+          pbOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-postbottom', pbOptions);
+    
+    
+      flOptions = {};
+      
+          flOptions.iconStyle = "default";
+      
+          flOptions.boxForm = "vertical";
+      
+          flOptions.position = "topRight";
+      
+          flOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-float', flOptions);
+    
+  </script>
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
