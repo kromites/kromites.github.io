@@ -49,6 +49,88 @@
       </tags>
   </entry>
   <entry>
+    <title>剖析智能指针</title>
+    <url>/posts/af38cf01/</url>
+    <content><![CDATA[<blockquote>
+<p>本篇文章记录一下Cpp11新特性：智能指针。主要聚焦于WHY, WHAT, HOW。</p>
+</blockquote>
+<span id="more"></span>
+
+<h3 id="WHY"><a href="#WHY" class="headerlink" title="WHY"></a>WHY</h3><p>智能指针是C++11的新特性，在之前的C++语法中，没有垃圾回收机制，要想对动态内存管理，只靠用户的new和delete。</p>
+<p><strong>直接使用这组函数很容易造成内存泄漏和使用非法内存的指针</strong>，为了更好更规范的应用动态内存，C++11使用了智能指针。</p>
+<h3 id="WHAT"><a href="#WHAT" class="headerlink" title="WHAT"></a>WHAT</h3><ul>
+<li><p>智能指针：一种能够负责<strong>自动释放所指向的对象</strong>的指针。</p>
+</li>
+<li><p>类型：根据管理底层指针的方式，分为三类</p>
+<ul>
+<li><p><code>shared_ptr</code>：允许多个指针指向同一个对象</p>
+</li>
+<li><p><code>unique_ptr</code>:  一个指针独占该对象</p>
+</li>
+<li><p><code>weak_ptr</code>: 弱引用，指向<code>shared_ptr</code>所指的对象，主要解决<strong>循环引用</strong>的问题</p>
+</li>
+</ul>
+</li>
+<li><p>基本原理：</p>
+<ul>
+<li>在构造函数或者调用<code>make_shared</code>，<code>make_unique</code>时调用<code>new operator</code>（关于new操作对内存的处理可参考其它文章）。</li>
+<li>在析构函数时调用<code>delete operator</code></li>
+</ul>
+</li>
+</ul>
+<h4 id="shared-ptr"><a href="#shared-ptr" class="headerlink" title="shared_ptr"></a>shared_ptr</h4><figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">SharePtr</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	<span class="built_in">SharePtr</span>();</span><br><span class="line">	~<span class="built_in">SharePtr</span>();</span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">	T* ptr_;</span><br><span class="line">	<span class="keyword">size_t</span> count;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>上图是一个简单的shared_ptr模型，在此之间可以看到有两个变量，一个是指针变量，一个是引用计数变量。</p>
+<ul>
+<li>指针变量：该指针变量指向目标对象。</li>
+<li>引用计数变量： 该引用计数记录着指向相同对象的<code>share_ptr</code>的个数。（在赋值或者拷贝构造的时候会+1）</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="keyword">auto</span> p = make_shared&lt;<span class="keyword">int</span>&gt;(<span class="number">42</span>);</span><br><span class="line"><span class="function"><span class="keyword">auto</span> <span class="title">q</span><span class="params">(p)</span>	<span class="comment">// call copy ctor, and the count = 2;</span></span></span><br></pre></td></tr></table></figure>
+
+<p>在shared_ptr的析构函数中，会进行两步操作：</p>
+<ul>
+<li><p><strong>释放该指针</strong>，并且引用计数-1。（只是销毁指针而已）</p>
+</li>
+<li><p><strong>判断引用计数是否为0，若为0，那么释放对象（销毁对象并释放空间）</strong>。</p>
+</li>
+</ul>
+<p><strong>引用计数保证了，只有在最后一个指向该对象的智能指针销毁之后，才能释放对象内存。</strong></p>
+<p>但是引用计数也会有缺点，查看下面的代码：</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">B</span>;</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	shared_ptr&lt;B&gt; ptr;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">B</span> &#123;</span></span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">	shared_ptr&lt;A&gt; ptr; <span class="comment">// fix --&gt; weak_ptr&lt;A&gt; ptr; </span></span><br><span class="line">&#125;;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">	shared_ptr&lt;A&gt; pa = make_shared&lt;A&gt;();</span><br><span class="line">	shared_ptr&lt;B&gt; pb = make_shared&lt;B&gt;();</span><br><span class="line">	pa-&gt;ptr = pb;</span><br><span class="line">	pb-&gt;ptr = pa;</span><br><span class="line">    cout &lt;&lt; pa.<span class="built_in">use_count</span>() &lt;&lt; <span class="string">&quot; &quot;</span> &lt;&lt; pb.<span class="built_in">use_count</span>() &lt;&lt; endl;</span><br><span class="line">    <span class="comment">// ans : 2  2</span></span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// return 之后， 引用计数为 1, 1. 这样就没有调用delete释放对象，造成内存泄漏</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个例子中的产生的问题叫<strong>循环引用</strong></p>
+<p>如何解决？——weak_ptr。</p>
+<p>weak_ptr是一种弱引用，并不会对引用计数造成增加，如果是循环引用的问题，将其中一个 shared_ptr改成weak_ptr即可。</p>
+<p>（owner持有指向child的shared_ptr，child持有owner的weak_ptr)</p>
+<p><strong>线程安全问题</strong></p>
+<p>​    这种问题就是看源码，源码面前无秘密。</p>
+<p>​    <strong>shared_ptr只是引用计数是线程安全的，指针本身是和内置类型一样级别的线程安全（和标准库容器一样）。</strong></p>
+<ul>
+<li><p>引用计数的线程安全：<strong>windows上是一个syscall，由windows运行时提供的原子自增接口，gnu是内联汇编，lock之后inc</strong></p>
+</li>
+<li><p>指针的线程安全：对于读操作是安全的，对于写操作是必须得加锁才安全。（<strong>毕竟是有两个变量，不能原子化</strong>）</p>
+</li>
+</ul>
+<p>在多线程中拷贝或者赋值一个shared_ptr，通常是要加锁的，因为相当于对引用计数进行了修改。</p>
+<h4 id="unique-ptr"><a href="#unique-ptr" class="headerlink" title="unique_ptr"></a>unique_ptr</h4><p>​    这个指针比shared_ptr更易懂，因为<strong>该指针是独享被管理对象指针所有权的智能指针</strong>。（注意独享的是被管理对象<strong>指针</strong>所有权）。</p>
+<p>因此unique_ptr有一些特点</p>
+<ul>
+<li><p><strong>无引用计数，永远是独享的</strong></p>
+</li>
+<li><p>无拷贝，赋值运算符操作</p>
+</li>
+<li><p>可转移所有权（使用move)</p>
+</li>
+</ul>
+]]></content>
+      <categories>
+        <category>Cpp语法</category>
+      </categories>
+      <tags>
+        <tag>智能指针</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>项目多线程日志</title>
     <url>/posts/7acd93ae/</url>
     <content><![CDATA[<blockquote>
