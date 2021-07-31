@@ -49,6 +49,77 @@
       </tags>
   </entry>
   <entry>
+    <title>缓存</title>
+    <url>/posts/8a15ea5f/</url>
+    <content><![CDATA[<blockquote>
+<p>本篇文章记录下自己所理解的缓存</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+
+
+<p><strong>缓存是一种利用数据冗余，牺牲部分数据容量来提高该部分数据容量读取速度的一种方式。</strong></p>
+<ul>
+<li>利用数据冗余：缓存一般是重复数据。</li>
+<li>提高读取速度：缓存一般用于<strong>两端（缓存读入端和缓存输出端）速度有差异的情况下，或者两端速度都很慢的情况下，使用缓存能够提高速度</strong>。</li>
+</ul>
+<p>典型实现</p>
+<h4 id="内存——缓存——磁盘"><a href="#内存——缓存——磁盘" class="headerlink" title="内存——缓存——磁盘"></a>内存——缓存——磁盘</h4><p>在该模型下内存处理速度很快，磁盘的处理速度很慢。在此之间加入一个缓存，<strong>缓存的处理速度远高于磁盘，稍低于内存</strong>。在此情况下，将（频繁读取）数据存储在缓存中，内存就可以直接从缓存中拿东西了，而不需要去忍受磁盘的速度。</p>
+<h4 id="服务器——Redis——MySQL"><a href="#服务器——Redis——MySQL" class="headerlink" title="服务器——Redis——MySQL"></a>服务器——Redis——MySQL</h4><p>在该模型下一般来说也是将Redis这种键值数据库当做缓存，这也是因为服务器直接读取MySQL的速度和读取Redis上的数据差距很大，这样将服务器需要频繁拉取的信息存放在Redis中，也能够加快速度。</p>
+<p>比如聊天系统中，在用户登录之后，服务器需要从MySQL中拉取该用户的信息，以及好友信息，黑名单等。这时可以让Redis去拉取，然后将这些信息放到Redis中，服务器要想要的话，直接从Redis中拉取就行了。</p>
+<h4 id="缓存相关概念"><a href="#缓存相关概念" class="headerlink" title="缓存相关概念"></a>缓存相关概念</h4><p>一般在数据库方面，缓存所应用的就是Redis服务器</p>
+<p>有关Redis缓存概念（如缓存雪崩、缓存击穿、缓存穿透）和解决方案可参考该博客<a href="https://zhuanlan.zhihu.com/p/346651831">https://zhuanlan.zhihu.com/p/346651831</a></p>
+<p><strong>一般缓存的问题都是在高并发下才能体现出来</strong></p>
+<ul>
+<li><p>缓存穿透：假如有黑客<strong>传进大量数据库中的不存在的key</strong>，这样会使大量无效请求作用在MySQL数据库上，使其压力很大，直接宕机。</p>
+<ul>
+<li><p>解决方案： </p>
+<ul>
+<li><p>使用布隆过滤器，如果不存在，那么数据库里没有，直接返回</p>
+</li>
+<li><p>Redis缓存中直接返回空值</p>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>缓存击穿：假如Redis中有个热点Key无效（过期）了，这时如果有大量的请求来访问该key值，Redis上找不到，那么都会去数据库上找，这样也会使大量请求作用在MySQL数据库上，使其压力很大，直接宕机。</p>
+<ul>
+<li>解决方案：<ul>
+<li>对于热点key不设置过期时间（但是浪费内存）</li>
+<li>提供分布式锁（如mutex)，如果缓存失效的情况，只有拿到锁才可以查询数据库，降低了并发量。（但是会降低性能）</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>缓存雪崩：假如Redis宕机了，或者大量的key值在同一时间段过期，这时如果有大量请求来访问，Redis也没用，那么也会去数据库上找，这样也会使大量请求作用在MySQL数据库上，使其压力很大，直接宕机。</p>
+<ul>
+<li>解决方案：<ul>
+<li>针对宕机问题：搭建Redis集群，提高Redis容灾性。</li>
+<li>针对大量key值同时过期： 在过期时间增加一个随机值，避免同时过期。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>这些缓存问题都是想让主数据库直接宕机，因此不仅要在缓存上做提升，还可以增加MySQL的容灾机制，如：</p>
+<ul>
+<li><p><strong>使用熔断机制</strong>。当流量到达一定的阈值时，就直接返回“系统拥挤”之类的提示，防止过多的请求打在数据库上。至少能保证一部分用户是可以正常使用，其他用户多刷新几次也能得到结果。（这让我想到了教务管理系统。。。）</p>
+</li>
+<li><p>提高数据库的容灾能力，可以使用<strong>分库分表</strong>，读写分离的策略。</p>
+</li>
+</ul>
+]]></content>
+      <categories>
+        <category>Redis</category>
+      </categories>
+      <tags>
+        <tag>缓存</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>剖析智能指针</title>
     <url>/posts/af38cf01/</url>
     <content><![CDATA[<blockquote>
