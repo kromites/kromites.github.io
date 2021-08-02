@@ -6199,7 +6199,6 @@
 <p>下面就来介绍一下MySQL支持的索引类型，以及它们的优缺点。</p>
 <h4 id="B-Tree索引"><a href="#B-Tree索引" class="headerlink" title="B-Tree索引"></a>B-Tree索引</h4><p>​    这个是索引的主要类型。底层为B+树数据结构。</p>
 <h5 id="B-树结构"><a href="#B-树结构" class="headerlink" title="B+树结构"></a><strong>B+树结构</strong></h5><p>​    首先我们来简单介绍下B+树</p>
-<p><img src="/posts/43a71ae4/Users\16258\Desktop\hexo\source_posts\MySQL索引\B树介绍.png" alt="image-20210726163709331"></p>
 <img src="/posts/43a71ae4/B%E6%A0%91%E4%BB%8B%E7%BB%8D.png" class title="B+树介绍">
 
 <p>​    不过B+树的插入和删除操作会导致其结构发生变化，但是永远会保持平衡，而且根节点到叶子节点的距离永远相同。<strong>这样为了保持平衡对于新插入的键值可能需要做大量的拆分页操作</strong>。因为B+树结构主要用于磁盘，页的拆分意味着磁盘的操作，所以应该在可能的情况下减少页的拆分，因此B+树也有类似于AVL树的旋转操作，以减少页拆分的次数。</p>
