@@ -49,6 +49,245 @@
       </tags>
   </entry>
   <entry>
+    <title>RPC</title>
+    <url>/posts/c5176eb2/</url>
+    <content><![CDATA[<blockquote>
+<p>本篇文章用来初步介绍下什么是RPC，算是网络编程的一个延伸。</p>
+<p>（本篇文章算是转载自<a href="https://zhuanlan.zhihu.com/p/148139089%EF%BC%89">https://zhuanlan.zhihu.com/p/148139089）</a></p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h3 id="基本介绍"><a href="#基本介绍" class="headerlink" title="基本介绍"></a>基本介绍</h3><h4 id="语义介绍"><a href="#语义介绍" class="headerlink" title="语义介绍"></a>语义介绍</h4><p>​    RPC的语义就是<strong>远程过程调用</strong>：将一个服务调用封装在一个本地方法中，让调用者像使用本地方法一样调用服务，对其屏蔽实现细节。</p>
+<p>​    这话的意思不难理解，但是具体的实现一般都是需要一份“协议”：</p>
+<ul>
+<li>如何封装方法</li>
+<li>如何调用远程方法</li>
+<li>如何传输方法</li>
+</ul>
+<p>​     最后，当然还要去相对底层和抽象的视角来理解RPC</p>
+<h4 id="三个特点"><a href="#三个特点" class="headerlink" title="三个特点"></a>三个特点</h4><p>​    广义上来讲，<strong>所有本应用程序外的调用都可以归类为RPC</strong>，不管是分布式服务器，还是第三方服务，甚至是对Redis的请求。这些不在本地执行的请求，一般有三个特点：</p>
+<ul>
+<li><strong>需要事先约定调用的语义（接口语法）</strong></li>
+<li><strong>需要网络传输</strong></li>
+<li><strong>需要约定网络传输中的内容格式</strong></li>
+</ul>
+<p>举例：假如一次Redis调用为<code>redis.set(&quot;rpc&quot;, 1)</code>，其中：</p>
+<ul>
+<li><code>set</code>以及参数<code>(&quot;rpc&quot;, 1)</code>就是接口语法，接口语法由Redis的API给出</li>
+<li>Redis Server会监听一个服务端口，通过TCP传输内容，使用事件驱动处理事件</li>
+<li>底层库会约定数据如何进行编解码，如何标识命令和参数，如何表示结果，如何表示数据的结尾等等</li>
+</ul>
+<p>这三个特点都是因为<strong>调用不在本地</strong>而衍生的问题，这也决定了RPC的形态。所有的RPC解决方案都是在解决这三个问题，不断地在提出更加优良的解决方案，试图达到更好的性能，更低的使用成本。</p>
+<img src="/posts/undefined/RPC%E7%8A%B6%E6%80%81%E5%9B%BE.jpg" class title="RPC状态图">
+
+
+
+<h4 id="约定接口"><a href="#约定接口" class="headerlink" title="约定接口"></a>约定接口</h4><p>​    一般来说，在调用方和服务方都会有约定的接口。这些接口是由双方的Stub提供的。</p>
+<p>​    Stub会负责封装命令和参数，并以特定的数据格式进行打包。<strong>其中命令、参数和返回值都是需要客户端和服务端的Stub实现进行协商，双方都需要维护一份完全一样的方法及参数列表。</strong>调用时必须进行严格的约定进行压缩和解压缩。</p>
+<p>​    这是一个比较繁杂的过程，混合了<strong>调用语法</strong>和<strong>内容解压缩</strong>两部分内容，可以理解为<strong>如何组织内容</strong>问题。</p>
+<h4 id="网络传输"><a href="#网络传输" class="headerlink" title="网络传输"></a>网络传输</h4><p>​    搞定了协议约定问题后，接下来就是要通过Runtime进行内容传输，一般是需要通过Socket编程来实现，使用TCP或UDP来传输，一般来说是使用TCP来进行可靠传输。同时当对调用性能有要求时，可能会使用<strong>Socket的异步编程模型</strong>，消除等待中的消耗，这会引入事件机制，通过状态机来解析处理或回复请求。当出现超时、丢包等情况时还进行做重试、重传、报错等等。</p>
+<p>​    一般来说在网络传输方面有着比较成熟的框架，这些框架分为两类：</p>
+<ul>
+<li><strong>Restful HTTP JSON</strong></li>
+<li><strong>GRPC HTTP2.0 Protobuf</strong></li>
+</ul>
+<h5 id="Restful-HTTP-JSON"><a href="#Restful-HTTP-JSON" class="headerlink" title="Restful HTTP JSON"></a>Restful HTTP JSON</h5><p>​    Restful是一种<strong>资源状态转换</strong>的架构峰哥，也可以用来实现RPC，由于互联网对HTTP超广泛的支持，这一般是首选。</p>
+<p>​    该种方案有以下的特点：</p>
+<ul>
+<li>通过HTTP协议进行内容传输，Header用来约定编码，body大小等，使用\r\n间隔。</li>
+<li><strong>通过URL和对应参数来标示要调用的方法和参数</strong>。<strong>在body中用JSON对内容进行编码，极易跨语言，不需要约定特定的复杂编码格式和Stub文件。</strong></li>
+</ul>
+<p>当然不仅仅只有优点，还有缺点：（主要性能方面）</p>
+<ul>
+<li><strong>HTTP的header和Json的数据冗余和低压缩率使得传输性能差</strong></li>
+<li>JSON难以表达复杂的参数类型，如结构体等</li>
+</ul>
+<h5 id="GRPC-HTTP2-0-Protobuf"><a href="#GRPC-HTTP2-0-Protobuf" class="headerlink" title="GRPC HTTP2.0 Protobuf"></a>GRPC HTTP2.0 Protobuf</h5><p>​    GRPC是一款RPC框架，相对来说在性能上做了一些提升和让步：</p>
+<ul>
+<li><strong>Protobuf进行数据编码，提高数据压缩率</strong></li>
+<li><strong>使用HTTP2.0弥补了HTTP1.1的不足</strong></li>
+<li><strong>同样在调用方和服务方使用协议约定文件，提供参数可选，为版本兼容留下缓冲空间</strong></li>
+</ul>
+<p>之后，重点就是Protobuf和HTTP2.0。</p>
+<h4 id="总结："><a href="#总结：" class="headerlink" title="总结："></a>总结：</h4><p>​    RPC的远程调用语义，以及其三个特点，然后在这三个特点中可以归纳成约定接口和网络传输两方面。在网络传输中有两种重要的框架，一般我们是基于性能考虑使用GRPC的框架。</p>
+<h3 id="Protobuf"><a href="#Protobuf" class="headerlink" title="Protobuf"></a>Protobuf</h3><h4 id="基本介绍-1"><a href="#基本介绍-1" class="headerlink" title="基本介绍"></a>基本介绍</h4><p>​    <a href="https://link.zhihu.com/?target=https://github.com/protocolbuffers/protobuf">protobuf</a>是一款用<strong>C++开发的跨语言、二进制编码的数据序列化协议</strong>，以超高的压缩率著称。</p>
+<p>​    它也需要双方维护一个协议约束文件，以<code>.proto</code>结尾，使用<code>proto</code>命令能够对文件进行解析，生成对应的stub程序，<strong>客户端和服务端都需要保存这份Stub程序用来进行编解码</strong>。</p>
+<p>​    </p>
+<h4 id="WHY？"><a href="#WHY？" class="headerlink" title="WHY？"></a>WHY？</h4><p>​    使用Protobuf的原因自然是<strong>因为其性能好，空间优化强。</strong> 比如传输<code>123</code>，文本类的需要3个字节(ascii 31 32 33)来传输，而二进制类只需要一个字节(01111011)就可以表示。</p>
+<p>​    同时因为Protobuf会维护<code>.proto</code>文件，这样在解析文件生成Stub程序时，可以对方法名进行编号，这样也能够省略大量字节，总而言之，其编码能力能够节约空间和处理时间。</p>
+<p>​    与之进行对比的json和xml传统策略都太过冗余，性能不是很好。</p>
+<h4 id="特点介绍"><a href="#特点介绍" class="headerlink" title="特点介绍"></a>特点介绍</h4><p>首先来看看一个<code>.proto</code>文件的格式</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">// XXXX.proto</span></span><br><span class="line">service Test &#123;</span><br><span class="line">    <span class="function">rpc <span class="title">HowRpcDefine</span> <span class="params">(Request)</span> <span class="title">returns</span> <span class="params">(Response)</span> </span>; <span class="comment">// 定义一个RPC方法</span></span><br><span class="line">&#125;</span><br><span class="line">message Request &#123;</span><br><span class="line">    <span class="comment">//类型 | 字段名字|  标号</span></span><br><span class="line">    int64    user_id  = <span class="number">1</span>;</span><br><span class="line">    string   name     = <span class="number">2</span>;</span><br><span class="line">&#125;</span><br><span class="line">message Response &#123;</span><br><span class="line">    repeated int64 ids = <span class="number">1</span>; <span class="comment">// repeated 表示数组</span></span><br><span class="line">    Value info = <span class="number">2</span>;         <span class="comment">// 可嵌套对象</span></span><br><span class="line">    map&lt;<span class="keyword">int</span>, Value&gt; values = <span class="number">3</span>;    <span class="comment">// 可输出map映射</span></span><br><span class="line">&#125;</span><br><span class="line">message Value &#123;</span><br><span class="line">    <span class="keyword">bool</span> is_man = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">int</span> age = <span class="number">2</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后就是这个的特点：</p>
+<ul>
+<li>有明确的类型，支持的类型有多种</li>
+<li>每个field会有名字</li>
+<li>每个field有一个<strong>数字标号</strong>，一般按顺序排列(下文编解码会用到这个点)</li>
+<li>能表达数组、map映射等类型</li>
+<li>通过<strong>嵌套message可以表达复杂的对象</strong></li>
+<li>方法、参数的定义落到一个.proto 文件中，<strong>依赖双方需要同时持有这个文件，并依此进行编解码</strong></li>
+</ul>
+<p>​    不过文件不是代码，不能执行，因此肯定不能直接跨语言，<strong>必须得通过该文件生成相应语言的中间代码</strong>，才能够实现跨语言这个特点。</p>
+<p>​    中间代码要有以下的能力：</p>
+<ul>
+<li><strong>将message转成对象</strong>，例如golang里是struct，Ruby里是class，需要各自表达后，才能被理解</li>
+<li><strong>需要有进行编解码的代码，能解码内容为自己语言的对象、能将对象编码为对应的数据</strong></li>
+</ul>
+<p>​    一般来说，Protobuf提供的是一套统一的protoc工具：<strong>protobuf通过自动化编译器的方式统一提供了这种能力，避免人肉写</strong>。</p>
+<figure class="highlight c++"><table><tr><td class="code"><pre><span class="line"><span class="comment">//       依赖目录      生成golang中间代码   对应proto文件地址</span></span><br><span class="line">protoc -I=$SRC_DIR --go_out=$DST_DIR  $SRC_DIR/XXX.proto</span><br><span class="line">protoc -I=$SRC_DIR --java_out=$DST_DIR $SRC_DIR/XXX.proto <span class="comment">// 生成java中间代码</span></span><br></pre></td></tr></table></figure>
+
+
+
+<h4 id="二进制数据流"><a href="#二进制数据流" class="headerlink" title="二进制数据流"></a>二进制数据流</h4><p>​    现在我们只知道一个Protobuf是一个二进制流，那么以下的问题可以思考一下：</p>
+<ul>
+<li>它该怎么<code>分隔字段</code>、<code>表达层次结构</code>呢？</li>
+<li>字段value一般分为两种，一种是定长的，例如一个int，它最多4个字节；第二种是变长的，如字符串，你不知道它在哪儿结束。该如何表示？</li>
+<li>对于定长的int，如果对应值是1，那用4个字节表达是不是有些浪费，该如何节省？</li>
+</ul>
+<p>​    为此，protobuf将数据类型做了<strong>分类</strong>，并且提供了了不同的编码方式</p>
+<p>​    值得关注的有两种：</p>
+<ul>
+<li>Varint，解决定长类型的空间浪费，例如值为1的int32只用1字节，避免用四字节，达到压缩的效果。 T - V</li>
+<li>Length-delimi，用来表达长度不定的内容，如string、嵌套数据、数组。 T - L - V</li>
+</ul>
+<p>（T-V 是定长， T-L-V是表达变长的内容）</p>
+<p>嵌套的话，value就是一个T-V或者T-L-V的内容。</p>
+<p>​    至于再往文件中的内容就不扩展了。</p>
+<h4 id="优缺点对比"><a href="#优缺点对比" class="headerlink" title="优缺点对比"></a>优缺点对比</h4><p>上面说了Protobuf如何编解码，以及为什么压缩率会比json高，可以看出其有点有：</p>
+<ul>
+<li><strong>没有打包无用的数据，排列紧凑，体积小，利于传输</strong></li>
+<li><strong>解析策略简单，序列化/反序列化 速度快</strong></li>
+<li><strong>能较好的兼容字段(不能解析到的会跳过)</strong></li>
+</ul>
+<p>但缺点也非常明显：</p>
+<ul>
+<li>肉眼看不出来value是什么，无法自描述， 难以debug</li>
+<li><strong>需要proto文件才能知道如何解析</strong>，否则是天书，这在灵活性上不如json</li>
+</ul>
+<p>其实在本质上其差别在于：<strong>json的设计是给人看的，protobuf则是利于机器</strong>。</p>
+<p>适用场景不同，各有利弊。作为工具，讨论其快、好、差没有意义，在合适的地方，用合适的工具即可。</p>
+<h3 id="HTTP2-0"><a href="#HTTP2-0" class="headerlink" title="HTTP2.0"></a>HTTP2.0</h3><h4 id="HTTP1-1"><a href="#HTTP1-1" class="headerlink" title="HTTP1.1"></a>HTTP1.1</h4><p>​    HTTP1.1是网络传输的最广泛的手段，那为什么要使用HTTP2.0呢？</p>
+<p>首先看1.1的缺点：</p>
+<ul>
+<li>HTTP1.1冗余文本过多，导致传输体积更大，即没个报文都有个header，这个header结构会消耗很多空间</li>
+<li>并发能力差，HTTP1.1是基于文本的协议，最多也是使用管线化，必须是一个个处理请求，因此还是并发能力差。</li>
+</ul>
+<p>HTTP2的优点：</p>
+<ul>
+<li><strong>HTTP2 未改变HTTP的语义(如GET/POST等)，只是在传输上做了优化</strong></li>
+<li><strong>引入帧、流的概念，在TCP连接中，可以区分出多个request/response</strong></li>
+<li>一个域名只会有一个TCP连接，借助帧、流可以实现<strong>多路复用</strong>，降低资源消耗</li>
+<li><strong>引入二进制编码，降低header带来的空间占用</strong></li>
+</ul>
+<p>由此看来，HTTP2能够在网络传输上做到<strong>更快的传输、更低的资源消耗</strong>这两个目标，与上文呼应。</p>
+<p>这两个目标是依靠下面的头部压缩和多路复用两种方法去实现的。</p>
+<h4 id="头部压缩"><a href="#头部压缩" class="headerlink" title="头部压缩"></a>头部压缩</h4><p>​    对于HTTP1.1的头部，会发送大量重复的文本内容，一次次发送占据了大量的带宽，因此选择了头部压缩。</p>
+<p>头部压缩的实现： <strong>静态表和动态表的结合</strong></p>
+<h5 id="静态表"><a href="#静态表" class="headerlink" title="静态表"></a>静态表</h5><p>​    <strong>将高频使用的Header编成一个静态表</strong>，每个header对应一个数组索引，每次只能用传这个索引，而不是冗长的文本。（这个表肯定是两方都有的）</p>
+<p>​    服务端可以根据内容查表，就可以还原出header。</p>
+<h5 id="动态表"><a href="#动态表" class="headerlink" title="动态表"></a>动态表</h5><p>​    支持在静态表中动态增加本次连接中的header，也给其整一个编号，在第一次发送时，通过协议将Header天骄到表中，后面的请求都只需要发送编号就行。</p>
+<p>​    <strong>(请求方/服务方的表成员会保持同步一致)</strong></p>
+<h5 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h5><p>静态表是协议级别的约定，是不变的内容。动态表则是基于当前TCP连接进行协商的结果，发送请求前会互相设置好header，让请求方和服务方维护同一份动态表，后续的请求可复用。<strong>连接销毁时，动态表也会注销</strong>。</p>
+<h4 id="多路复用"><a href="#多路复用" class="headerlink" title="多路复用"></a>多路复用</h4><p>​    HTTP1.1处理连接必须得按照一定的顺序，不然它无法区分这个response是属于哪个请求，一旦多个请求返回的文本内容混在一起，那就会出现问题。这样的话会导致TCP资源的闲置。</p>
+<p>​    HTTP2.0使用TCP连接复用的方式，从而提升响应的效率，那么如何实现连接复用呢？</p>
+<p>​    HTTP2提出了<strong>流</strong>的概念，<strong>每一次请求对应一个流，有一个唯一ID，用来区分不同的请求</strong>。基于流的概念，进一步提出了<strong>帧</strong>，<strong>一个请求的数据会被分成多个帧，方便进行数据分割传输，每个帧都唯一属于某一个流ID，将帧按照流ID进行分组，即可分离出不同的请求。</strong></p>
+<p>​    这样同一个TCP连接能够同时并发多个请求，不同请求的帧可以穿插在一起，根据流ID分组即可。</p>
+<p>​     这也是多路复用思想的一种落地方式，在很多消息队列协议中也广泛存在，如AMQP[4]，其channel的概念和流如出一辙，大道相通。</p>
+<p>​    在HTTP2中，<strong>流是一个逻辑上的概念，实际上就是一个int类型的ID，可顺序自增，只要不冲突即可</strong>，每条<code>帧</code>数据都会携带一个流ID，当一串串帧在TCP通道中传输时，通过其流ID，即可区分出不同的请求。</p>
+<p>​    <strong>帧则有更多较为复杂的作用，HTTP2几乎所有数据交互，都是以帧为单位进行的</strong>，包括header、body、约定配置(除了Magic串)，这天然地就需要给帧进行分类，于是协议约定了以下帧类型：</p>
+<ul>
+<li><strong>HEADERS：帧仅包含 HTTP header信息。</strong></li>
+<li><strong>DATA：帧包含消息的所有或部分请求数据。</strong></li>
+<li>PRIORITY：指定分配给流的优先级。服务方可先处理高优先请求</li>
+<li>RST_STREAM：错误通知：一个推送承诺遭到拒绝。终止某个流。</li>
+<li>SETTINGS：指定连接配置。(用于配置，流ID为0) [会ACK确认收到]</li>
+<li>PUSH_PROMISE：通知一个将资源推送到客户端的意图。</li>
+<li><strong>PING：检测信号和往返时间</strong>。（流ID为0）[会ACK]</li>
+<li>GOAWAY：停止为当前连接生成流的停止通知。</li>
+<li>WINDOW_UPDATE：用于流控制，约定发送窗口大小。</li>
+<li>CONTINUATION：用于继续传送header片段序列。</li>
+</ul>
+<p>一次HTTP2的请求有以下过程：</p>
+<ul>
+<li>通过一个或多个SETTINGS帧约定一些数据（会有ACK机制，确认约定内容）</li>
+<li>请求方通过<strong>HEADERS帧</strong>将请求A的header打包发出</li>
+<li><em>请求B可穿插···</em></li>
+<li>请求方通过<strong>DATA帧</strong>将请求A的request数据打包发出</li>
+<li>服务方通过<strong>HEADERS帧</strong>将请求A的response header打包发出</li>
+<li><em>请求C可穿插···</em></li>
+<li>服务方通过<strong>DATA帧</strong>将请求A的response数据打包发出</li>
+</ul>
+<h4 id="二进制编码"><a href="#二进制编码" class="headerlink" title="二进制编码"></a>二进制编码</h4><p>​    在知道了HTTP这两个特性的原理之后，来往内部看如何实现这两个特性。</p>
+<p>​    <strong>任何一个应用层的传输协议，都需要解决一个问题，那就是如何表示数据结尾，如何分割数据。</strong>在H1.1中，我们知道，它粗暴地先发Header，再发body，每个header通过<code>\r\n</code>文本内容来分割，header和body通过<code>\r\n\r\n</code>来分割，通过content-length的值读取body，一个请求的内容就成功结束。</p>
+<figure class="highlight http"><table><tr><td class="code"><pre><span class="line">// 一次请求的返回</span><br><span class="line">200 OK\r\nHeader1:Value1\r\nHeader2:Value2\r\nHeader3:Value3\r\n\r\nI am body</span><br><span class="line">// 网络中实际传输的是上面文本的ascii编码</span><br></pre></td></tr></table></figure>
+
+<p>​    <strong>HTTP2 为了降低协议占用，不会使用文本分割，也不会使用文本来表示header。它是如何表示一帧开始、一帧结束、header传完了、body传完了呢？</strong></p>
+<p>下面是帧格式，所有帧都是一个固定的 <strong>9 字节头部</strong> (payload 之前) 跟一个指定长度的数据(payload):</p>
+<figure class="highlight asciidoc"><table><tr><td class="code"><pre><span class="line"><span class="code">+-----------------------------------------------+</span></span><br><span class="line"><span class="section">|                 Length (24)                   |</span></span><br><span class="line"><span class="section">+---------------+---------------+---------------+</span></span><br><span class="line"><span class="section">|   Type (8)    |   Flags (8)   |</span></span><br><span class="line"><span class="section">+-+-------------+---------------+-------------------------------+</span></span><br><span class="line"><span class="section">|R|                 Stream Identifier (31)                      |</span></span><br><span class="line"><span class="section">+=+=============================================================+</span></span><br><span class="line"><span class="section">|                   Frame Payload (0...)                      ...</span></span><br><span class="line"><span class="section">+---------------------------------------------------------------+</span></span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><p>Length代表整个帧的长度，24位无符号整数，字节为单位，只记录Frame PayLoad</p>
+</li>
+<li><p>Type定义为帧的类型，用8bits表示。帧类型决定了帧的格式和语义，不同类型有差异</p>
+</li>
+<li><p><strong>Flags 是为帧类型相关而预留的布尔标识</strong>。标识对于不同的帧类型赋予了不同的语义，例如下面会提到的Padding</p>
+</li>
+<li><p><strong>R 是一个保留的比特位。这个比特的语义没有定义，发送时它必须被设置为 (0x0), 接收时需要忽略。</strong></p>
+</li>
+<li><p><strong>Stream Identifier 唯一标示一个流，用 31 位无符号整数表示</strong>。客户端建立的 sid 必须为奇数，服务端建立的 sid 必须为偶数，值 (0x0) 保留给与整个连接相关联的帧 (连接控制消息)，而不是单个流</p>
+</li>
+<li><p><strong>Frame Payload 是主体内容，由帧类型决定</strong>（上面的<strong>9个字节都是协议本身的消耗，payload才是请求本身的主要内容</strong>）</p>
+</li>
+</ul>
+<p>不同的帧类型，有不同的Payload格式，我们分别介绍DATA帧和HEADDERS帧：</p>
+<p>DATA帧的Payload:</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">+---------------+</span><br><span class="line"> |Pad Length? (8)|</span><br><span class="line"> +---------------+-----------------------------------------------+</span><br><span class="line"> |                            Data (*)                         ...</span><br><span class="line"> +---------------------------------------------------------------+</span><br><span class="line"> |                           Padding (*)                       ...</span><br><span class="line"> +---------------------------------------------------------------+</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>Pad Length: ? 表示此字段的出现时有条件的，当帧的Flags(8)的第三位为1时，才有效，否则会被忽略</li>
+<li>Data: 传递的数据，其长度上限等于帧的 payload 长度减去其他出现的字段长度(如果有pad的话)。在gRPC中，Data这部分内容就是用Protobuf将数据编码的结果</li>
+<li>Padding: 填充字节，没有具体语义，发送时必须设为 0，作用是混淆报文长度，为安全目的服务</li>
+</ul>
+<p>Data帧的Flags(8)目前有两个位有意义：</p>
+<ul>
+<li>END_STREAM: bit 0 设为 1 代表当前流的最后一帧，告诉接收方<strong>请求数据发送完毕</strong>，否则还要继续等下一帧(接收方)</li>
+<li>PADDED: bit 3 设为 1 代表存在 Padding</li>
+</ul>
+<p>HEADER帧Payload：</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">+---------------+</span><br><span class="line"> |Pad Length? (8)|</span><br><span class="line"> +-+-------------+-----------------------------------------------+</span><br><span class="line"> |E|                 Stream Dependency? (31)                     |</span><br><span class="line"> +-+-------------+-----------------------------------------------+</span><br><span class="line"> |  Weight? (8)  |</span><br><span class="line"> +-+-------------+-----------------------------------------------+</span><br><span class="line"> |                   Header Block Fragment (*)                 ...</span><br><span class="line"> +---------------------------------------------------------------+</span><br><span class="line"> |                           Padding (*)                       ...</span><br><span class="line"> +---------------------------------------------------------------+</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>Pad Length: 同DATA帧</li>
+<li>E: 一个比特位声明流的依赖性是否是排他的，存在则代表 PRIORITY flag 被设置</li>
+<li>Stream Dependency: 指定一个 stream identifier，代表当前流所依赖的流的 id，存在则代表 PRIORITY flag 被设置</li>
+<li>Weight: 一个无符号 8 为整数，代表当前流的优先级权重值 (1~256)，存在则代表 PRIORITY flag 被设置</li>
+<li>Header Block Fragment: header 块片段，header依次打包排列在里面</li>
+<li>Padding: 同DATA帧</li>
+</ul>
+<p>于上面头部压缩的内容，我们知道header可以存在于静态表、动态表中。此时只需要传一个index即可表达对应的header，减少传输内容。 请求传递的header情况有以下几种：</p>
+<ul>
+<li>header 的key、value 在静态表/动态表中，<strong>此时只需要传递一个index即可</strong></li>
+<li>header 的key 在静态、动态表中，而value由于多种多样，不在表中(如Host)，此时key可以由index表示，但value需要传递原内容</li>
+<li>header 的**key、value完全不在静态、动态表中，key、value都需要传递原内容(**字符串)</li>
+<li>希望将本次传递的header写入动态表中，下次只需要传index 即可</li>
+<li>不希望本次传递的header写入动态表中</li>
+</ul>
+<p>如果想进一步提升，那就使用HTTP3，拥抱QUIC。</p>
+<h3 id="分布式应用"><a href="#分布式应用" class="headerlink" title="分布式应用"></a>分布式应用</h3><p>//todo</p>
+]]></content>
+      <categories>
+        <category>技术入门</category>
+      </categories>
+      <tags>
+        <tag>RPC</tag>
+        <tag>Protobuf</tag>
+        <tag>HTTP2.0</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>图的算法</title>
     <url>/posts/5b871085/</url>
     <content><![CDATA[<blockquote>
